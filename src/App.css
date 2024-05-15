@@ -36,3 +36,34 @@
     transform: rotate(360deg);
   }
 }
+
+.top-text {
+  background-color: #D9DDDC;
+  height: 2rem;
+  box-shadow: -1px 3.5px #BDBEB8;
+  padding: 0.25rem;
+  margin: 0;
+}
+
+.icons {
+  width: 5%;
+  border-right: 1.5px solid #BDBEB8;
+}
+
+.parent {
+  display: flex;
+  height: 100vh;
+}
+
+.palatte-area {
+  width: 20%;
+  margin-top: 0.5rem;
+}
+
+.content-area {
+  display: flex;
+  width: 80%;
+  background: #D9DDDC;
+  height: 100%;
+  border: 2px solid #BEB6B8;
+}
