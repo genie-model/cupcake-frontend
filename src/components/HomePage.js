@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCheckCircle, faCog, faList, faFileAlt, faChartBar } from '@fortawesome/free-solid-svg-icons';
-
+import FileStructure from './FileStructure';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 function HomePage() {
     const [showDiv, setShowDiv] = useState(false);
-    const [showList, setShowList] = useState(false);
 
-    const handleClick = () => {
-        setShowDiv(true);
-    };
+    const palleteIconClasses = ['glyphicon glyphicon-plus', 'glyphicon glyphicon-plus', 'glyphicon glyphicon-plus', 'glyphicon glyphicon-plus'];
+
+    const palatteIcon = (iconClass) => {
+        return (
+            <div className='palatte-icon'>
+                <button type="button" className="btn btn-default btn-sm">
+                    <span className={iconClass}></span> Plus
+                </button>
+                <hr />
+            </div>
+        );
+    }
 
     const divStyle = {
         display: showDiv ? 'block' : 'none',
@@ -18,38 +25,36 @@ function HomePage() {
         marginTop: '20px',
     };
 
-    const jobs = ["job1","job2","job3"];
-
-    const jobIcon = (heading) => (<div className='header'>
-        <img></img>
-        {heading}          
-    </div>);
-
     return (
         <>
             <div>
                 <p className="top-text">Job</p>
                 <div className="parent">
                     <div className="palatte-area">
-                        <button className='job-list' onClick={()=>setShowList(!showList)}>
-                        {jobIcon("My Jobs")}
-                        </button>
-                        {showList && <div>{jobs.map((name) => <div className='job'>{jobIcon(name)}</div>)}</div>}
+                        <FileStructure />
                     </div>
                     <div className='content-area'>
-                        <div className='icons'></div>
+                        <div className='icons'>
+                            {
+                                palleteIconClasses.map((iconClass, index) => (
+                                    <div key={index}>
+                                        {palatteIcon(iconClass)}
+                                    </div>
+                                ))
+                            }
+                        </div>
                         <div className='task'>
-                            <button>1</button>
-                            <button>2</button>
-                            <button>3</button>
-                            <button>4</button>
-                            <button>5</button>
+                            
+                            <button>Status</button>
+                            <button>Setup</button>
+                            <button>Namelists</button>
+                            <button>Output</button>
+                            <button>Plots</button>
                         </div>
                     </div>
                 </div>
             </div>
-            
-        </>  
+        </>
     );
 }
 
