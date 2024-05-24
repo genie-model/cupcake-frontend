@@ -45,20 +45,20 @@ function HomePage() {
 
     const renderContent = () => {
         switch (activeDiv) {
-          case "Status":
-            return <Status />;
-          case "Setup":
-            return <Setup />;
-          case "Namelists":
-            return <Namelists />;
-          case "Output":
-            return <Output />;
-          case "Plots":
-            return <Plots />;
-          default:
-            return null;
+            case "Status":
+                return <Status />;
+            case "Setup":
+                return <Setup />;
+            case "Namelists":
+                return <Namelists />;
+            case "Output":
+                return <Output />;
+            case "Plots":
+                return <Plots />;
+            default:
+                return null;
         }
-      };
+    };
 
     const renderModalContent = () => {
         switch (modalContent) {
