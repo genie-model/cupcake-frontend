@@ -66,7 +66,7 @@ const FileStructure = () => {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/jobs");
+        const response = await axios.get("http://localhost:8001/jobs");
         const jobList = response.data.jobs.map((job) => ({
           heading: job.name,
           child: {},
@@ -114,4 +114,3 @@ const FileStructure = () => {
 };
 
 export default FileStructure;
-
