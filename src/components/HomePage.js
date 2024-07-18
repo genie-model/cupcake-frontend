@@ -3,6 +3,11 @@ import FileStructure from './FileStructure';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { Modal, Button } from 'react-bootstrap';
+import Status from "./Status";
+import Setup from "./Setup";
+import Namelists from "./Namelists";
+import Output from "./Output";
+import Plots from "./Plots";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, AreaChart, Area,
   ScatterChart, Scatter, RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -201,86 +206,20 @@ function HomePage() {
 
     const renderContent = () => {
         switch (activeDiv) {
-            case 'Status':
-                return <div style={divStyle}>
-                            <div style={textContainerStyle}>
-                                <div>
-                                    <label>Job Path:</label>
-                                    <input type="text" />
-                                </div>
-                                <div>
-                                    <label>Job Status:</label>
-                                    <input type="text" />
-                                </div>
-                                <div>
-                                    <label>Run Length:</label>
-                                    <input type="text" />
-                                </div>
-                            </div>
-                        </div>;
-            case 'Setup':
-                return <div style={divStyle}>
-                            <div style={textContainerStyle}>
-                                <div>
-                                    <label>Job Path:</label>
-                                    <input type="text" />
-                                </div>
-                                <div>
-                                    <label>Run Segment:</label>
-                                    <input type="text" />
-                                </div>
-                                <div>
-                                    <label>Base Config:</label>
-                                    <select>
-                                        <option value="config1">Config 1</option>
-                                        <option value="config2">Config 2</option>
-                                        <option value="config3">Config 3</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label>User Config:</label>
-                                    <select>
-                                        <option value="config1">Config 1</option>
-                                        <option value="config2">Config 2</option>
-                                        <option value="config3">Config 3</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label>Modifications:</label>
-                                    <input type="text" style={{ width: '200px', height: '300px' }} />
-                                </div>
-                                <div>
-                                    <label>Run Length:</label>
-                                    <input type="text" />
-                                </div>
-                                <div>
-                                    <label>Restart From:</label>
-                                    <select>
-                                        <option value="config1">Config 1</option>
-                                        <option value="config2">Config 2</option>
-                                        <option value="config3">Config 3</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>;
-            case 'Namelists':
-                return <div style={divStyle}>Namelists Content</div>;
-            case 'Output':
-                return <div style={divStyle}>Output Content</div>;
-            case 'Plots':
-                return <div style={gridContainerStyle}>
-                            {renderLineChart()}
-                            {renderBarChart()}
-                            {renderPieChart()}
-                            {renderAreaChart()}
-                            {renderScatterChart()}
-                            {renderRadarChart()}
-                            {renderComposedChart()}
-                        </div>;
-            default:
-                return null;
+          case "Status":
+            return <Status />;
+          case "Setup":
+            return <Setup />;
+          case "Namelists":
+            return <Namelists />;
+          case "Output":
+            return <Output />;
+          case "Plots":
+            return <Plots />;
+          default:
+            return null;
         }
-    };
+      };
 
     const renderModalContent = () => {
         switch (modalContent) {
