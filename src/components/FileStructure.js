@@ -28,7 +28,13 @@ const RenderNode = ({ level, heading, childExist, isOpen, onClick }) => {
   );
 };
 
-const RenderTree = ({ node, level, expandedNodes, toggleNode }) => {
+const RenderTree = ({
+  node,
+  level,
+  expandedNodes,
+  toggleNode,
+  onSelectJob,
+}) => {
   if (!node) return null;
 
   const isOpen = expandedNodes[node.heading];
@@ -41,7 +47,12 @@ const RenderTree = ({ node, level, expandedNodes, toggleNode }) => {
         heading={node.heading}
         childExist={hasChild}
         isOpen={isOpen}
-        onClick={() => toggleNode(node.heading)}
+        onClick={() => {
+          toggleNode(node.heading);
+          if (!hasChild) {
+            onSelectJob(node.heading);
+          }
+        }}
       />
       {isOpen &&
         hasChild &&
@@ -52,13 +63,14 @@ const RenderTree = ({ node, level, expandedNodes, toggleNode }) => {
             level={level + 1}
             expandedNodes={expandedNodes}
             toggleNode={toggleNode}
+            onSelectJob={onSelectJob}
           />
         ))}
     </div>
   );
 };
 
-const FileStructure = () => {
+const FileStructure = ({ onSelectJob }) => {
   const [jobs, setJobs] = useState([]);
   const [expandedNodes, setExpandedNodes] = useState({});
   const [error, setError] = useState(null);
@@ -81,10 +93,15 @@ const FileStructure = () => {
   }, []);
 
   const toggleNode = (heading) => {
-    setExpandedNodes((prev) => ({
-      ...prev,
-      [heading]: !prev[heading],
-    }));
+    setExpandedNodes((prev) => {
+      const isCollapsed = prev[heading];
+      const newExpandedNodes = { ...prev, [heading]: !isCollapsed };
+      // If collapsing "My Jobs", clear the selected job
+      if (heading === "My Jobs" && isCollapsed) {
+        onSelectJob(null);
+      }
+      return newExpandedNodes;
+    });
   };
 
   if (error) {
@@ -107,6 +124,7 @@ const FileStructure = () => {
             level={1}
             expandedNodes={expandedNodes}
             toggleNode={toggleNode}
+            onSelectJob={onSelectJob}
           />
         ))}
     </div>
