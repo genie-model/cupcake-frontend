@@ -49,7 +49,7 @@ const RenderTree = ({
         isOpen={isOpen}
         onClick={() => {
           toggleNode(node.heading);
-          if (!hasChild) {
+          if (!hasChild && onSelectJob) {
             onSelectJob(node.heading);
           }
         }}
@@ -97,7 +97,7 @@ const FileStructure = ({ onSelectJob }) => {
       const isCollapsed = prev[heading];
       const newExpandedNodes = { ...prev, [heading]: !isCollapsed };
       // If collapsing "My Jobs", clear the selected job
-      if (heading === "My Jobs" && isCollapsed) {
+      if (heading === "My Jobs" && isCollapsed && onSelectJob) {
         onSelectJob(null);
       }
       return newExpandedNodes;
