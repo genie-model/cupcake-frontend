@@ -101,4 +101,19 @@ pm2 save
 pm2 startup
 ```
 
+To kill the Node process managed by PM2, you can use the following commands:
+
+    List all PM2 processes:
+
+    sh
+
+pm2 list
+
+Stop the specific process:
+Identify the process you want to stop from the list. You can use either the name you assigned (in this case, "my-app") or the process ID (PID).
+
+sh
+
+pm2 stop my-app
+
 This updated README file should be more structured and easier to read.
