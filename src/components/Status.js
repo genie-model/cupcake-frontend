@@ -1,6 +1,10 @@
 import React from "react";
 
-const Status = () => {
+const Status = ({ job }) => {
+  if (!job) {
+    return <div>No job selected</div>;
+  }
+
   const divStyle = {
     display: 'block',
     backgroundColor: '#f0f0f0',
@@ -23,15 +27,19 @@ const Status = () => {
       <div style={textContainerStyle}>
         <div>
           <label>Job Path:</label>
-          <input type="text" />
+          <input type="text" value={job.path} readOnly />
         </div>
         <div>
           <label>Job Status:</label>
-          <input type="text" />
+          <input type="text" value={job.status} readOnly />
         </div>
         <div>
           <label>Run Length:</label>
-          <input type="text" />
+          <input type="text" value={job.run_length} readOnly />
+        </div>
+        <div>
+          <label>T100:</label>
+          <input type="text" value={job.t100} readOnly />
         </div>
       </div>
     </div>
