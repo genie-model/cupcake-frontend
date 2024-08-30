@@ -32,7 +32,7 @@ function HomePage() {
 
   const handleSelectJob = async (jobName) => {
     try {
-      const response = await axios.get(`http://cupcake.ctoaster.org:8001/job/${jobName}`);
+      const response = await axios.get(`http://localhost:8001/job/${jobName}`);
       setSelectedJob(response.data.job);
     } catch (err) {
       console.error("Error fetching job data:", err);

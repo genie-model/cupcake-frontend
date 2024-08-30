@@ -78,7 +78,7 @@ const FileStructure = ({ onSelectJob }) => {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const response = await axios.get("http://cupcake.ctoaster.org:8001/jobs");
+        const response = await axios.get("http://localhost:8001/jobs");
         const jobList = response.data.jobs.map((job) => ({
           heading: job.name,
           child: {},
