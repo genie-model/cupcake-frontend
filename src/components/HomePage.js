@@ -126,6 +126,7 @@ function HomePage() {
         return null;
     }
   };
+
   const renderModalContent = () => {
     switch (modalContent) {
       case "Add Job":
@@ -140,48 +141,13 @@ function HomePage() {
                 onChange={(e) => setNewJobName(e.target.value)}
               />
             </div>
-            <Button variant="primary" onClick={handleAddJob}>
-              OK
-            </Button>
-          </div>
-        );
-      case "Setup":
-        return (
-          <div>
-            <div>
-              <label>Setup Name:</label>
-              <input type="text" className="form-control" />
-            </div>
-            <div>
-              <label>Setup Details:</label>
-              <input type="text" className="form-control" />
-            </div>
-          </div>
-        );
-      case "Run Job":
-        return (
-          <div>
-            <div>
-              <label>Are you sure, you want to run this job?</label>
-            </div>
-          </div>
-        );
-      case "Pause Job":
-        return (
-          <div>
-            <div>
-              <label>Are you sure, you want to pause this job?</label>
-            </div>
           </div>
         );
       case "Remove Job":
         return (
           <div>
-            <label>Are you sure, you want to remove the job?</label>
+            <label>Are you sure you want to remove the job?</label>
             <label>This action is irreversible!</label>
-            <Button variant="danger" onClick={handleDeleteJob}>
-              OK
-            </Button>
           </div>
         );
       default:
@@ -232,7 +198,17 @@ function HomePage() {
         </Modal.Header>
         <Modal.Body>{renderModalContent()}</Modal.Body>
         <Modal.Footer>
-          <Button variant="primary" onClick={handleCloseModal}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (modalContent === "Add Job") {
+                handleAddJob(); // Trigger handleAddJob on clicking OK
+              } else if (modalContent === "Remove Job") {
+                handleDeleteJob(); // Trigger handleDeleteJob on clicking OK
+              }
+              handleCloseModal(); // Close the modal
+            }}
+          >
             OK
           </Button>
           <Button variant="secondary" onClick={handleCloseModal}>
