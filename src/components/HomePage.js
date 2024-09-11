@@ -51,7 +51,15 @@ function HomePage() {
       refreshJobs(); // Refresh the job list after adding a new job
     } catch (err) {
       console.error("Error adding job:", err);
-      alert("Error adding job");
+
+      // Check if there is a response from the backend
+      if (err.response && err.response.data && err.response.data.detail) {
+        // Display the detailed error message from the backend
+        alert(`Error adding job: ${err.response.data.detail}`);
+      } else {
+        // Fallback to a generic error message
+        alert("Error adding job");
+      }
     }
   };
 
