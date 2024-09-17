@@ -38,16 +38,16 @@
 }
 
 .top-text {
-  background-color: #D9DDDC;
+  background-color: #d9dddc;
   height: 2rem;
-  box-shadow: -1px 3.5px #BDBEB8;
+  box-shadow: -1px 3.5px #bdbeb8;
   padding: 0.25rem;
   margin: 0;
 }
 
 .icons {
   width: 5%;
-  border-right: 1.5px solid #BDBEB8;
+  border-right: 1.5px solid #bdbeb8;
 }
 
 .parent {
@@ -63,7 +63,14 @@
 .content-area {
   display: flex;
   width: 80%;
-  background: #D9DDDC;
+  background: #d9dddc;
   height: 100%;
-  border: 2px solid #BEB6B8;
+  border: 2px solid #beb6b8;
 }
+
+/* For highlighting the job selected */
+.selected-job {
+  background-color: #e0e0e0; /* Light gray background */
+  border-left: 4px solid #05a4db; /* Highlight with a border */
+}
+

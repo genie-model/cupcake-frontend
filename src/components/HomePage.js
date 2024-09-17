@@ -16,6 +16,8 @@ function HomePage() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalContent, setModalContent] = useState(null);
+  const [newJobName, setNewJobName] = useState("");
+  const [refreshJobs, setRefreshJobs] = useState(() => () => {});
 
   const handleIconClick = (type) => {
     setModalContent(type);
@@ -36,6 +38,41 @@ function HomePage() {
       setSelectedJob(response.data.job);
     } catch (err) {
       console.error("Error fetching job data:", err);
+    }
+  };
+
+  const handleAddJob = async () => {
+    try {
+      const response = await axios.post("http://localhost:8001/add-job", {
+        job_name: newJobName,
+      });
+      alert(response.data.message);
+      setShowModal(false);
+      refreshJobs(); // Refresh the job list after adding a new job
+    } catch (err) {
+      console.error("Error adding job:", err);
+
+      // Check if there is a response from the backend
+      if (err.response && err.response.data && err.response.data.detail) {
+        // Display the detailed error message from the backend
+        alert(`Error adding job: ${err.response.data.detail}`);
+      } else {
+        // Fallback to a generic error message
+        alert("Error adding job");
+      }
+    }
+  };
+
+  const handleDeleteJob = async () => {
+    try {
+      const response = await axios.delete("http://localhost:8001/delete-job");
+      alert(response.data.message);
+      setShowModal(false);
+      refreshJobs(); // Refresh the job list after deleting the job
+      setSelectedJob(null); // Clear the selected job
+    } catch (err) {
+      console.error("Error deleting job:", err);
+      alert("Error deleting job");
     }
   };
 
@@ -67,12 +104,26 @@ function HomePage() {
     );
   };
 
+  const refreshJobDetails = async (jobName) => {
+    try {
+      const response = await axios.get(`http://localhost:8001/job/${jobName}`);
+      setSelectedJob(response.data.job);
+    } catch (err) {
+      console.error("Error refreshing job data:", err);
+    }
+  };
+
   const renderContent = () => {
     switch (activeDiv) {
       case "Status":
         return <Status job={selectedJob} />;
       case "Setup":
-        return <Setup job={selectedJob} />;
+        return (
+          <Setup
+            selectedJob={selectedJob}
+            refreshJobDetails={refreshJobDetails} // Pass the new prop
+          />
+        );
       case "Namelists":
         return <Namelists job={selectedJob} />;
       case "Output":
@@ -91,43 +142,19 @@ function HomePage() {
           <div>
             <div>
               <label>Name for New Job:</label>
-              <input type="text" className="form-control" />
-            </div>
-          </div>
-        );
-      case "Setup":
-        return (
-          <div>
-            <div>
-              <label>Setup Name:</label>
-              <input type="text" className="form-control" />
-            </div>
-            <div>
-              <label>Setup Details:</label>
-              <input type="text" className="form-control" />
-            </div>
-          </div>
-        );
-      case "Run Job":
-        return (
-          <div>
-            <div>
-              <label>Are you sure, you want to run this job?</label>
-            </div>
-          </div>
-        );
-      case "Pause Job":
-        return (
-          <div>
-            <div>
-              <label>Are you sure, you want to pause this job?</label>
+              <input
+                type="text"
+                className="form-control"
+                value={newJobName}
+                onChange={(e) => setNewJobName(e.target.value)}
+              />
             </div>
           </div>
         );
       case "Remove Job":
         return (
           <div>
-            <label>Are you sure, you want to remove the job?</label>
+            <label>Are you sure you want to remove the job?</label>
             <label>This action is irreversible!</label>
           </div>
         );
@@ -142,7 +169,10 @@ function HomePage() {
         <p className="top-text">Job</p>
         <div className="parent" style={{ position: "relative" }}>
           <div className="palatte-area">
-            <FileStructure onSelectJob={handleSelectJob} />
+            <FileStructure
+              onSelectJob={handleSelectJob}
+              setRefreshJobs={setRefreshJobs}
+            />
           </div>
           <div className="content-area">
             <div className="icons">
@@ -176,7 +206,17 @@ function HomePage() {
         </Modal.Header>
         <Modal.Body>{renderModalContent()}</Modal.Body>
         <Modal.Footer>
-          <Button variant="primary" onClick={handleCloseModal}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (modalContent === "Add Job") {
+                handleAddJob(); // Trigger handleAddJob on clicking OK
+              } else if (modalContent === "Remove Job") {
+                handleDeleteJob(); // Trigger handleDeleteJob on clicking OK
+              }
+              handleCloseModal(); // Close the modal
+            }}
+          >
             OK
           </Button>
           <Button variant="secondary" onClick={handleCloseModal}>

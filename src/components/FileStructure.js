@@ -14,10 +14,17 @@ const JobIcon = ({ heading, childExist, isOpen, onClick }) => {
   );
 };
 
-const RenderNode = ({ level, heading, childExist, isOpen, onClick }) => {
+const RenderNode = ({
+  level,
+  heading,
+  childExist,
+  isOpen,
+  onClick,
+  selected,
+}) => {
   const marginLeft = 2 * level + "rem";
   return (
-    <div style={{ marginLeft }}>
+    <div style={{ marginLeft }} className={selected ? "selected-job" : ""}>
       <JobIcon
         heading={heading}
         childExist={childExist}
@@ -34,6 +41,7 @@ const RenderTree = ({
   expandedNodes,
   toggleNode,
   onSelectJob,
+  selectedJob,
 }) => {
   if (!node) return null;
 
@@ -53,6 +61,7 @@ const RenderTree = ({
             onSelectJob(node.heading);
           }
         }}
+        selected={node.heading === selectedJob}
       />
       {isOpen &&
         hasChild &&
@@ -64,44 +73,56 @@ const RenderTree = ({
             expandedNodes={expandedNodes}
             toggleNode={toggleNode}
             onSelectJob={onSelectJob}
+            selectedJob={selectedJob}
           />
         ))}
     </div>
   );
 };
 
-const FileStructure = ({ onSelectJob }) => {
+const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
   const [jobs, setJobs] = useState([]);
   const [expandedNodes, setExpandedNodes] = useState({});
   const [error, setError] = useState(null);
+  const [selectedJob, setSelectedJob] = useState(null);
+
+  const fetchJobs = async () => {
+    try {
+      const response = await axios.get("http://localhost:8001/jobs");
+      const jobList = response.data.jobs.map((job) => ({
+        heading: job.name,
+        child: {},
+      }));
+      setJobs(jobList);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   useEffect(() => {
-    const fetchJobs = async () => {
-      try {
-        const response = await axios.get("http://localhost:8001/jobs");
-        const jobList = response.data.jobs.map((job) => ({
-          heading: job.name,
-          child: {},
-        }));
-        setJobs(jobList);
-      } catch (err) {
-        setError(err.message);
-      }
-    };
-
     fetchJobs();
-  }, []);
+    setRefreshJobs(() => fetchJobs);
+  }, [setRefreshJobs]);
 
   const toggleNode = (heading) => {
     setExpandedNodes((prev) => {
       const isCollapsed = prev[heading];
       const newExpandedNodes = { ...prev, [heading]: !isCollapsed };
-      // If collapsing "My Jobs", clear the selected job
-      if (heading === "My Jobs" && isCollapsed && onSelectJob) {
-        onSelectJob(null);
+      if (heading === "My Jobs" && !isCollapsed) {
+        setSelectedJob(null);
+        if (onSelectJob) {
+          onSelectJob(null);
+        }
       }
       return newExpandedNodes;
     });
+  };
+
+  const handleSelectJob = (jobName) => {
+    setSelectedJob(jobName);
+    if (onSelectJob) {
+      onSelectJob(jobName);
+    }
   };
 
   if (error) {
@@ -124,7 +145,8 @@ const FileStructure = ({ onSelectJob }) => {
             level={1}
             expandedNodes={expandedNodes}
             toggleNode={toggleNode}
-            onSelectJob={onSelectJob}
+            onSelectJob={handleSelectJob}
+            selectedJob={selectedJob}
           />
         ))}
     </div>
