@@ -106,6 +106,22 @@ function HomePage() {
     }
   };
 
+  const handlePauseJob = async () => {
+    try {
+      const response = await axios.post("http://localhost:8001/pause-job");
+      alert(response.data.message); // Display success message
+      setShowModal(false); // Close modal after pausing the job
+      refreshJobs(); // Refresh job status after pausing
+    } catch (err) {
+      console.error("Error pausing job:", err);
+      if (err.response && err.response.data && err.response.data.detail) {
+        alert(`Error pausing job: ${err.response.data.detail}`);
+      } else {
+        alert("Error pausing job");
+      }
+    }
+  };
+
   const palatteIcon = (iconClass, color, type) => {
     return (
       <div className="palatte-icon" onClick={() => handleIconClick(type)}>
@@ -194,11 +210,16 @@ function HomePage() {
             <label>Are you sure you want to run the job?</label>
           </div>
         );
+      case "Pause Job":
+        return (
+          <div>
+            <label>Are you sure you want to pause the job?</label>
+          </div>
+        );
       default:
         return null;
     }
   };
-
   useEffect(() => {
     let intervalId;
 
@@ -284,12 +305,14 @@ function HomePage() {
                 handleDeleteJob();
               } else if (modalContent === "Run Job") {
                 handleRunJob(); // Trigger handleRunJob on clicking OK
+              } else if (modalContent === "Pause Job") {
+                handlePauseJob(); // Trigger handlePauseJob on clicking OK
               }
               handleCloseModal();
             }}
           >
             OK
-          </Button>
+          </Button>{" "}
           <Button variant="secondary" onClick={handleCloseModal}>
             Cancel
           </Button>
