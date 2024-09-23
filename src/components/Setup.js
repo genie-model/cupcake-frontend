@@ -4,17 +4,14 @@ import axios from "axios";
 const Setup = ({ selectedJob, refreshJobDetails }) => {
   const [jobDetails, setJobDetails] = useState(null);
   const [initialSetup, setInitialSetup] = useState(null);
-  const [runSegments, setRunSegments] = useState([]);
   const [baseConfigs, setBaseConfigs] = useState([]);
   const [userConfigs, setUserConfigs] = useState([]);
-  const [completedJobs, setCompletedJobs] = useState([]); // New state variable
+  const [completedJobs, setCompletedJobs] = useState([]);
   const [modifications, setModifications] = useState("");
   const [runLength, setRunLength] = useState("");
-  const [t100, setT100] = useState(false);
   const [restartFrom, setRestartFrom] = useState("");
   const [baseConfig, setBaseConfig] = useState("");
   const [userConfig, setUserConfig] = useState("");
-  const [runSegment, setRunSegment] = useState("");
 
   useEffect(() => {
     const fetchJobDetails = async () => {
@@ -27,11 +24,9 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
         setInitialSetup(setup); // Save the initial setup
         setModifications(setup.modifications || "");
         setRunLength(setup.run_length || "");
-        setT100(setup.t100 || false);
         setRestartFrom(setup.restart_from || "");
         setBaseConfig(setup.base_config || "");
         setUserConfig(setup.user_config || "");
-        setRunSegment(setup.run_segment || "");
       } catch (err) {
         console.error("Error fetching job details:", err);
       }
@@ -40,17 +35,14 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
     const fetchDropdownValues = async () => {
       try {
         const [
-          runSegmentsResponse,
           baseConfigsResponse,
           userConfigsResponse,
           completedJobsResponse,
         ] = await Promise.all([
-          axios.get(`http://localhost:8001/run-segments/${selectedJob.name}`),
           axios.get("http://localhost:8001/base-configs"),
           axios.get("http://localhost:8001/user-configs"),
           axios.get("http://localhost:8001/completed-jobs"), // Fetch completed jobs
         ]);
-        setRunSegments(runSegmentsResponse.data.run_segments || []);
         setBaseConfigs(baseConfigsResponse.data.base_configs || []);
         setUserConfigs(userConfigsResponse.data.user_configs || []);
         setCompletedJobs(completedJobsResponse.data.completed_jobs || []); // Set completed jobs
@@ -74,7 +66,6 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
           user_config: userConfig,
           modifications,
           run_length: runLength,
-          t100,
           restart_from: restartFrom,
         },
       );
@@ -93,11 +84,9 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
     if (initialSetup) {
       setModifications(initialSetup.modifications || "");
       setRunLength(initialSetup.run_length || "");
-      setT100(initialSetup.t100 || false);
       setRestartFrom(initialSetup.restart_from || "");
       setBaseConfig(initialSetup.base_config || "");
       setUserConfig(initialSetup.user_config || "");
-      setRunSegment(initialSetup.run_segment || "");
     }
   };
 
@@ -130,19 +119,6 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
             <div>
               <label>Job Name:</label>
               <span>{selectedJob.name}</span>
-            </div>
-            <div>
-              <label>Run Segment:</label>
-              <select
-                value={runSegment}
-                onChange={(e) => setRunSegment(e.target.value)}
-              >
-                {runSegments.map((segment, index) => (
-                  <option key={index} value={segment}>
-                    {segment}
-                  </option>
-                ))}
-              </select>
             </div>
             <div>
               <label>Base Config:</label>
@@ -184,14 +160,6 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
                 type="text"
                 value={runLength}
                 onChange={(e) => setRunLength(e.target.value)}
-              />
-            </div>
-            <div>
-              <label>T100:</label>
-              <input
-                type="checkbox"
-                checked={t100}
-                onChange={(e) => setT100(e.target.checked)}
               />
             </div>
             <div>
