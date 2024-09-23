@@ -33,10 +33,13 @@ function HomePage() {
   const types = ["Add Job", "Setup", "Run Job", "Pause Job", "Remove Job"];
 
   const handleIconClick = (type) => {
-    setModalContent(type);
-    setShowModal(true);
+    if (type === "Pause Job") {
+      handlePauseJob(); // Directly call pause action without modal
+    } else {
+      setModalContent(type);
+      setShowModal(true);
+    }
   };
-
   const handleButtonClick = (type) => {
     setActiveDiv(type);
   };
@@ -208,12 +211,6 @@ function HomePage() {
         return (
           <div>
             <label>Are you sure you want to run the job?</label>
-          </div>
-        );
-      case "Pause Job":
-        return (
-          <div>
-            <label>Are you sure you want to pause the job?</label>
           </div>
         );
       default:
