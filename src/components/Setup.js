@@ -2,15 +2,13 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 const Setup = ({ selectedJob, refreshJobDetails }) => {
-  // Receive as prop
   const [jobDetails, setJobDetails] = useState(null);
   const [initialSetup, setInitialSetup] = useState(null);
-  const [runSegments, setRunSegments] = useState([]);
   const [baseConfigs, setBaseConfigs] = useState([]);
   const [userConfigs, setUserConfigs] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
   const [modifications, setModifications] = useState("");
   const [runLength, setRunLength] = useState("");
-  const [t100, setT100] = useState(false);
   const [restartFrom, setRestartFrom] = useState("");
   const [baseConfig, setBaseConfig] = useState("");
   const [userConfig, setUserConfig] = useState("");
@@ -24,12 +22,11 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
         const setup = response.data.setup;
         setJobDetails(setup);
         setInitialSetup(setup); // Save the initial setup
-        setModifications(setup.modifications);
-        setRunLength(setup.run_length);
-        setT100(setup.t100);
-        setRestartFrom(setup.restart_from);
-        setBaseConfig(setup.base_config);
-        setUserConfig(setup.user_config);
+        setModifications(setup.modifications || "");
+        setRunLength(setup.run_length || "");
+        setRestartFrom(setup.restart_from || "");
+        setBaseConfig(setup.base_config || "");
+        setUserConfig(setup.user_config || "");
       } catch (err) {
         console.error("Error fetching job details:", err);
       }
@@ -37,15 +34,18 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
 
     const fetchDropdownValues = async () => {
       try {
-        const [runSegmentsResponse, baseConfigsResponse, userConfigsResponse] =
-          await Promise.all([
-            axios.get(`http://localhost:8001/run-segments/${selectedJob.name}`),
-            axios.get("http://localhost:8001/base-configs"),
-            axios.get("http://localhost:8001/user-configs"),
-          ]);
-        setRunSegments(runSegmentsResponse.data.run_segments || []);
+        const [
+          baseConfigsResponse,
+          userConfigsResponse,
+          completedJobsResponse,
+        ] = await Promise.all([
+          axios.get("http://localhost:8001/base-configs"),
+          axios.get("http://localhost:8001/user-configs"),
+          axios.get("http://localhost:8001/completed-jobs"), // Fetch completed jobs
+        ]);
         setBaseConfigs(baseConfigsResponse.data.base_configs || []);
         setUserConfigs(userConfigsResponse.data.user_configs || []);
+        setCompletedJobs(completedJobsResponse.data.completed_jobs || []); // Set completed jobs
       } catch (err) {
         console.error("Error fetching dropdown values:", err);
       }
@@ -66,7 +66,6 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
           user_config: userConfig,
           modifications,
           run_length: runLength,
-          t100,
           restart_from: restartFrom,
         },
       );
@@ -83,30 +82,23 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
 
   const handleRevertChanges = () => {
     if (initialSetup) {
-      setModifications(initialSetup.modifications);
-      setRunLength(initialSetup.run_length);
-      setT100(initialSetup.t100);
-      setRestartFrom(initialSetup.restart_from);
-      setBaseConfig(initialSetup.base_config);
-      setUserConfig(initialSetup.user_config);
+      setModifications(initialSetup.modifications || "");
+      setRunLength(initialSetup.run_length || "");
+      setRestartFrom(initialSetup.restart_from || "");
+      setBaseConfig(initialSetup.base_config || "");
+      setUserConfig(initialSetup.user_config || "");
     }
   };
 
   const divStyle = {
     display: "block",
     backgroundColor: "#f0f0f0",
-    top: "0",
-    left: "0",
-    right: "0",
-    bottom: "0",
-    padding: "400px",
+    padding: "20px",
   };
 
   const textContainerStyle = {
-    top: "0",
-    left: "0",
-    right: "0",
-    bottom: "0",
+    maxWidth: "800px",
+    margin: "0 auto",
   };
 
   if (!selectedJob) {
@@ -127,16 +119,6 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
             <div>
               <label>Job Name:</label>
               <span>{selectedJob.name}</span>
-            </div>
-            <div>
-              <label>Run Segment:</label>
-              <select value={jobDetails.run_segment}>
-                {runSegments.map((segment, index) => (
-                  <option key={index} value={segment}>
-                    {segment}
-                  </option>
-                ))}
-              </select>
             </div>
             <div>
               <label>Base Config:</label>
@@ -166,9 +148,8 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
             </div>
             <div>
               <label>Modifications:</label>
-              <input
-                type="text"
-                style={{ width: "200px", height: "300px" }}
+              <textarea
+                style={{ width: "100%", height: "150px" }}
                 value={modifications}
                 onChange={(e) => setModifications(e.target.value)}
               />
@@ -182,20 +163,22 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
               />
             </div>
             <div>
-              <label>T100:</label>
-              <input
-                type="checkbox"
-                checked={t100}
-                onChange={(e) => setT100(e.target.checked)}
-              />
-            </div>
-            <div>
               <label>Restart From:</label>
-              <input
-                type="text"
-                value={restartFrom}
-                onChange={(e) => setRestartFrom(e.target.value)}
-              />
+              {completedJobs.length > 0 ? (
+                <select
+                  value={restartFrom}
+                  onChange={(e) => setRestartFrom(e.target.value)}
+                >
+                  <option value="">None</option>
+                  {completedJobs.map((jobName, index) => (
+                    <option key={index} value={jobName}>
+                      {jobName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span>No completed jobs available</span>
+              )}
             </div>
             <div>
               <button onClick={handleSaveChanges}>Save changes</button>

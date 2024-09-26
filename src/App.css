@@ -74,3 +74,17 @@
   border-left: 4px solid #05a4db; /* Highlight with a border */
 }
 
+.output-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #f0f0f0;
+  height: 100%; /* Ensures the div takes full height of the parent container */
+  width: 100%; /* Ensures the div takes full width of the parent container */
+  overflow-y: auto; /* Adds scrolling if the content exceeds the div size */
+  padding: 10px; /* Adds some padding around the content */
+}
+
+.output-content {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
