@@ -3,6 +3,7 @@ import axios from "axios";
 import caretRight from "bootstrap-icons/icons/caret-right.svg";
 import caretDown from "bootstrap-icons/icons/caret-down.svg";
 
+// JobIcon component for showing jobs in the tree
 const JobIcon = ({ heading, childExist, isOpen, onClick }) => {
   return (
     <div onClick={onClick} style={{ cursor: "pointer" }}>
@@ -14,6 +15,7 @@ const JobIcon = ({ heading, childExist, isOpen, onClick }) => {
   );
 };
 
+// RenderNode component for each job in the file structure
 const RenderNode = ({
   level,
   heading,
@@ -22,7 +24,7 @@ const RenderNode = ({
   onClick,
   selected,
 }) => {
-  const marginLeft = 2 * level + "rem";
+  const marginLeft = `${2 * level}rem`;
   return (
     <div style={{ marginLeft }} className={selected ? "selected-job" : ""}>
       <JobIcon
@@ -35,6 +37,7 @@ const RenderNode = ({
   );
 };
 
+// Recursive function to render the tree structure
 const RenderTree = ({
   node,
   level,
@@ -80,12 +83,14 @@ const RenderTree = ({
   );
 };
 
+// Main FileStructure component
 const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
   const [jobs, setJobs] = useState([]);
   const [expandedNodes, setExpandedNodes] = useState({});
   const [error, setError] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
 
+  // Fetch the list of jobs
   const fetchJobs = async () => {
     try {
       const response = await axios.get("http://localhost:8001/jobs");
