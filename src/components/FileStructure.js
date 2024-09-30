@@ -3,7 +3,7 @@ import axios from "axios";
 import caretRight from "bootstrap-icons/icons/caret-right.svg";
 import caretDown from "bootstrap-icons/icons/caret-down.svg";
 
-// JobIcon component for showing jobs and namelists in the tree
+// JobIcon component for showing jobs in the tree
 const JobIcon = ({ heading, childExist, isOpen, onClick }) => {
   return (
     <div onClick={onClick} style={{ cursor: "pointer" }}>
@@ -15,7 +15,7 @@ const JobIcon = ({ heading, childExist, isOpen, onClick }) => {
   );
 };
 
-// RenderNode component for each job or namelist in the file structure
+// RenderNode component for each job in the file structure
 const RenderNode = ({
   level,
   heading,
@@ -24,7 +24,7 @@ const RenderNode = ({
   onClick,
   selected,
 }) => {
-  const marginLeft = 2 * level + "rem";
+  const marginLeft = `${2 * level}rem`;
   return (
     <div style={{ marginLeft }} className={selected ? "selected-job" : ""}>
       <JobIcon
@@ -89,7 +89,6 @@ const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
   const [expandedNodes, setExpandedNodes] = useState({});
   const [error, setError] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [namelists, setNamelists] = useState([]);
 
   // Fetch the list of jobs
   const fetchJobs = async () => {
@@ -102,22 +101,6 @@ const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
       setJobs(jobList);
     } catch (err) {
       setError(err.message);
-    }
-  };
-
-  // Fetch the namelists for the selected job
-  const fetchNamelists = async (jobName) => {
-    try {
-      const response = await axios.get(
-        `http://localhost:8001/jobs/${jobName}/namelists`
-      );
-      const namelistFiles = response.data.namelists.map((namelist) => ({
-        heading: namelist,
-        child: {},
-      }));
-      setNamelists(namelistFiles);
-    } catch (err) {
-      console.error("Error fetching namelists:", err);
     }
   };
 
@@ -142,7 +125,6 @@ const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
 
   const handleSelectJob = (jobName) => {
     setSelectedJob(jobName);
-    fetchNamelists(jobName);
     if (onSelectJob) {
       onSelectJob(jobName);
     }
