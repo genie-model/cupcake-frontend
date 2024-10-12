@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import FileStructure from "./FileStructure";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -18,12 +18,28 @@ function HomePage() {
   const [modalContent, setModalContent] = useState(null);
   const [newJobName, setNewJobName] = useState("");
   const [refreshJobs, setRefreshJobs] = useState(() => () => {});
+  const [jobOutputs, setJobOutputs] = useState({});
+  const outputRef = useRef(null); // Reference to Output component
+
+  // Define icon classes, colors, and types for the job control palette
+  const palleteIconClasses = [
+    "fas fa-plus",
+    "fa-regular fa-folder",
+    "fas fa-play",
+    "fa-solid fa-pause",
+    "fa-solid fa-xmark",
+  ];
+  const colors = ["#05a4db", "#cac000", "#88d500", "#dba405", "#fa2e00"];
+  const types = ["Add Job", "Setup", "Run Job", "Pause Job", "Remove Job"];
 
   const handleIconClick = (type) => {
-    setModalContent(type);
-    setShowModal(true);
+    if (type === "Pause Job") {
+      handlePauseJob(); // Directly call pause action without modal
+    } else {
+      setModalContent(type);
+      setShowModal(true);
+    }
   };
-
   const handleButtonClick = (type) => {
     setActiveDiv(type);
   };
@@ -52,12 +68,9 @@ function HomePage() {
     } catch (err) {
       console.error("Error adding job:", err);
 
-      // Check if there is a response from the backend
       if (err.response && err.response.data && err.response.data.detail) {
-        // Display the detailed error message from the backend
         alert(`Error adding job: ${err.response.data.detail}`);
       } else {
-        // Fallback to a generic error message
         alert("Error adding job");
       }
     }
@@ -70,21 +83,47 @@ function HomePage() {
       setShowModal(false);
       refreshJobs(); // Refresh the job list after deleting the job
       setSelectedJob(null); // Clear the selected job
+      if (outputRef.current) {
+        outputRef.current.clearOutput(); // Clear output state
+      }
     } catch (err) {
       console.error("Error deleting job:", err);
       alert("Error deleting job");
     }
   };
 
-  const palleteIconClasses = [
-    "fas fa-plus",
-    "fa-regular fa-folder",
-    "fas fa-play",
-    "fa-solid fa-pause",
-    "fa-solid fa-xmark",
-  ];
-  const colors = ["#05a4db", "#cac000", "#88d500", "#dba405", "#fa2e00"];
-  const types = ["Add Job", "Setup", "Run Job", "Pause Job", "Remove Job"]; // Corresponding types for each icon
+  // Define the function to handle running the job
+  const handleRunJob = async () => {
+    try {
+      const response = await axios.post("http://localhost:8001/run-job");
+      alert(response.data.message); // Display success message
+      setShowModal(false); // Close modal after running the job
+      refreshJobs(); // Refresh job status after running
+    } catch (err) {
+      console.error("Error running job:", err);
+      if (err.response && err.response.data && err.response.data.detail) {
+        alert(`Error running job: ${err.response.data.detail}`);
+      } else {
+        alert("Error running job");
+      }
+    }
+  };
+
+  const handlePauseJob = async () => {
+    try {
+      const response = await axios.post("http://localhost:8001/pause-job");
+      alert(response.data.message); // Display success message
+      setShowModal(false); // Close modal after pausing the job
+      refreshJobs(); // Refresh job status after pausing
+    } catch (err) {
+      console.error("Error pausing job:", err);
+      if (err.response && err.response.data && err.response.data.detail) {
+        alert(`Error pausing job: ${err.response.data.detail}`);
+      } else {
+        alert("Error pausing job");
+      }
+    }
+  };
 
   const palatteIcon = (iconClass, color, type) => {
     return (
@@ -114,25 +153,35 @@ function HomePage() {
   };
 
   const renderContent = () => {
-    switch (activeDiv) {
-      case "Status":
-        return <Status job={selectedJob} />;
-      case "Setup":
-        return (
+    return (
+      <>
+        <div style={{ display: activeDiv === "Status" ? "block" : "none" }}>
+          <Status job={selectedJob} />
+        </div>
+        <div style={{ display: activeDiv === "Setup" ? "block" : "none" }}>
           <Setup
             selectedJob={selectedJob}
-            refreshJobDetails={refreshJobDetails} // Pass the new prop
+            refreshJobDetails={refreshJobDetails}
           />
-        );
-      case "Namelists":
-        return <Namelists job={selectedJob} />;
-      case "Output":
-        return <Output job={selectedJob} />;
-      case "Plots":
-        return <Plots job={selectedJob} />;
-      default:
-        return null;
-    }
+        </div>
+        <div style={{ display: activeDiv === "Namelists" ? "block" : "none" }}>
+          <Namelists job={selectedJob} />
+        </div>
+        <div style={{ display: activeDiv === "Output" ? "block" : "none" }}>
+          {selectedJob && (
+            <Output
+              ref={outputRef}
+              job={selectedJob}
+              jobOutputs={jobOutputs}
+              setJobOutputs={setJobOutputs}
+            />
+          )}{" "}
+        </div>
+        <div style={{ display: activeDiv === "Plots" ? "block" : "none" }}>
+          <Plots job={selectedJob} />
+        </div>
+      </>
+    );
   };
 
   const renderModalContent = () => {
@@ -158,10 +207,48 @@ function HomePage() {
             <label>This action is irreversible!</label>
           </div>
         );
+      case "Run Job":
+        return (
+          <div>
+            <label>Are you sure you want to run the job?</label>
+          </div>
+        );
       default:
         return null;
     }
   };
+  useEffect(() => {
+    let intervalId;
+
+    // Function to fetch and update job details
+    const fetchJobDetails = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:8001/job/${selectedJob.name}`,
+        );
+        const updatedJob = response.data.job;
+
+        // Check if the job status has changed
+        if (updatedJob.status !== selectedJob.status) {
+          setSelectedJob(updatedJob);
+        }
+      } catch (err) {
+        console.error("Error updating job data:", err);
+      }
+    };
+
+    if (selectedJob) {
+      // Start polling every 5 seconds
+      intervalId = setInterval(fetchJobDetails, 5000);
+    }
+
+    return () => {
+      // Clear the interval when component unmounts or selectedJob changes
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [selectedJob]);
 
   return (
     <>
@@ -210,15 +297,19 @@ function HomePage() {
             variant="primary"
             onClick={() => {
               if (modalContent === "Add Job") {
-                handleAddJob(); // Trigger handleAddJob on clicking OK
+                handleAddJob();
               } else if (modalContent === "Remove Job") {
-                handleDeleteJob(); // Trigger handleDeleteJob on clicking OK
+                handleDeleteJob();
+              } else if (modalContent === "Run Job") {
+                handleRunJob(); // Trigger handleRunJob on clicking OK
+              } else if (modalContent === "Pause Job") {
+                handlePauseJob(); // Trigger handlePauseJob on clicking OK
               }
-              handleCloseModal(); // Close the modal
+              handleCloseModal();
             }}
           >
             OK
-          </Button>
+          </Button>{" "}
           <Button variant="secondary" onClick={handleCloseModal}>
             Cancel
           </Button>
