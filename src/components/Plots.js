@@ -62,36 +62,73 @@ const Plots = ({ job }) => {
         }
     };
 
+
     const renderLineChart = () => (
         <ResponsiveContainer width="100%" height={400}>
             <LineChart
                 data={chartData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                margin={{ top: 60, right: 30, left: 80, bottom: 20 }} // Increased left margin
             >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+    
+                {/* X-Axis with Proper Label Positioning */}
                 <XAxis 
                     dataKey="name" 
-                    label={{ value: 'Time', position: 'insideBottomRight', offset: 0, style: { fontSize: '14px', fill: '#333' } }} 
+                    tickFormatter={(tick) => `${tick} Years`} 
+                    label={{ 
+                        value: 'Time (Years)', 
+                        position: 'insideBottom', 
+                        dy: 20, // Vertical offset for label
+                        style: { fontSize: '14px', fill: '#333' } 
+                    }} 
                     tick={{ fontSize: '12px', fill: '#666' }}
                 />
+    
+                {/* Y-Axis with Adjusted Label Positioning */}
                 <YAxis 
-                    label={{ value: selectedVariable, angle: -90, position: 'insideLeft', style: { fontSize: '14px', fill: '#333' } }} 
+                    label={{ 
+                        value: `${selectedVariable} (Unit)`, 
+                        angle: -90, 
+                        position: 'insideLeft', 
+                        dx: -60, // Move the label closer to the center horizontally
+                        dy: 150,
+                        style: { fontSize: '14px', fill: '#333' },
+                        textAnchor: 'start' // Center-align vertically
+                    }} 
                     tick={{ fontSize: '12px', fill: '#666' }} 
                     tickFormatter={(value) => value.toExponential(2)}
                 />
+
+                {/* <YAxis
+                    label={{
+                        value: `${selectedVariable} (Unit)`, 
+                        angle: 0, // No rotation to align horizontally
+                        position: 'insideLeft', // Inside the left side of the chart
+                        dx: -10, // Fine-tune the horizontal position
+                        dy: 250, // Move the label down to align with the bottom of the Y-axis
+                        style: { fontSize: '14px', fill: '#333' },
+                        textAnchor: 'start' // Align text from the start (top-left)
+                    }}
+                    tick={{ fontSize: '12px', fill: '#666' }}
+                    tickFormatter={(value) => value.toExponential(2)}
+                /> */}
+
+    
                 <Tooltip
                     formatter={(value) => value.toLocaleString('en-US', { maximumFractionDigits: 2 })} 
-                    labelFormatter={(label) => `Time: ${label}`}
+                    labelFormatter={(label) => `Year: ${label}`} 
                 />
+    
                 <Legend 
                     verticalAlign="top" 
                     align="center" 
                     wrapperStyle={{ fontSize: '14px', marginBottom: '10px' }} 
                 />
+    
                 <Line 
                     type="monotone" 
                     dataKey="value" 
-                    name={`Variable: ${selectedVariable}`} // Add legend name dynamically
+                    name={`Variable: ${selectedVariable}`} 
                     stroke="#4A90E2" 
                     strokeWidth={2} 
                     dot={false} 
@@ -100,6 +137,7 @@ const Plots = ({ job }) => {
             </LineChart>
         </ResponsiveContainer>
     );
+    
         
     
     
