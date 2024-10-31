@@ -8,8 +8,10 @@ const Plots = ({ job }) => {
     const [dataFiles, setDataFiles] = useState([]);
     const [variables, setVariables] = useState([]);
     const [chartData, setChartData] = useState([]);
+    const [dataBuffer, setDataBuffer] = useState([]); // Buffer to store incoming data
     const [selectedDataFile, setSelectedDataFile] = useState('');
     const [selectedVariable, setSelectedVariable] = useState('');
+    const [eventSource, setEventSource] = useState(null);
 
     useEffect(() => {
         if (job) {
@@ -17,10 +19,30 @@ const Plots = ({ job }) => {
         }
     }, [job]);
 
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            if (dataBuffer.length > 0) {
+                console.log("Buffer data present:", dataBuffer.length); // Log the buffer length
+                setChartData((prevChartData) => [
+                    ...prevChartData,
+                    ...dataBuffer.slice(0, 50000) // Add small chunks at a time for smooth plotting
+                ]);
+                setDataBuffer((prevBuffer) => prevBuffer.slice(5)); // Remove processed data
+            }
+        }, 0.0005); // Adjust interval timing for plot speed
+    
+        return () => clearInterval(intervalId); // Clear interval on component unmount
+    }, []); // Remove dataBuffer dependency
+    
+    
+    useEffect(() => {
+        console.log("Chart data updated:", chartData.length); // Log the chart data length
+    }, [chartData]);
+        
+
     const fetchDataFiles = async () => {
         try {
             const response = await axios.get(`http://localhost:8001/get_data_files_list/${job.name}`);
-            console.log("response is :: ", response);
             setDataFiles(response.data);
         } catch (error) {
             console.error('Error fetching data files:', error);
@@ -45,86 +67,101 @@ const Plots = ({ job }) => {
     const handleVariableChange = (event) => {
         const selectedVar = event.target.value;
         setSelectedVariable(selectedVar);
-        fetchPlotData(selectedDataFile, selectedVar);
+
+        // Close any existing EventSource connection
+        if (eventSource) {
+            eventSource.close();
+        }
+
+        // Fetch initial data and start SSE for real-time updates
+        fetchInitialPlotData(selectedDataFile, selectedVar);
+        startSSEStream(selectedDataFile, selectedVar);
     };
 
-    const fetchPlotData = async (dataFile, variable) => {
+    const fetchInitialPlotData = async (dataFile, variable) => {
         try {
             const response = await axios.post('http://localhost:8001/get-plot-data', {
                 job_name: job.name,
                 data_file_name: dataFile,
                 variable: variable
             });
-            const plotData = response.data.data.map(([x, y]) => ({ name: x, value: y }));
-            setChartData(plotData);
+            const initialPlotData = response.data.data.map(([x, y]) => ({ name: x, value: y }));
+            setChartData(initialPlotData); // Initialize chart with existing data
         } catch (error) {
-            console.error('Error fetching plot data:', error);
+            console.error('Error fetching initial plot data:', error);
         }
     };
 
+    const startSSEStream = (dataFile, variable) => {
+        // Construct the SSE URL
+        const sseUrl = `http://localhost:8001/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
+
+        // Initialize the EventSource
+        const newEventSource = new EventSource(sseUrl);
+
+        // Buffer incoming data for smooth real-time plotting
+        newEventSource.onmessage = (event) => {
+            const [x, y] = event.data.split(",").map(Number);
+            setDataBuffer((prevBuffer) => [...prevBuffer, { name: x, value: y }]);
+        };
+
+        newEventSource.onerror = (error) => {
+            console.error("EventSource error:", error);
+            newEventSource.close();
+        };
+
+        setEventSource(newEventSource);
+    };
+
+    // Clean up EventSource on component unmount
+    useEffect(() => {
+        return () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+        };
+    }, [eventSource]);
 
     const renderLineChart = () => (
         <ResponsiveContainer width="100%" height={400}>
             <LineChart
                 data={chartData}
-                margin={{ top: 60, right: 30, left: 80, bottom: 20 }} // Increased left margin
+                margin={{ top: 60, right: 30, left: 80, bottom: 20 }}
             >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-    
-                {/* X-Axis with Proper Label Positioning */}
                 <XAxis 
                     dataKey="name" 
                     tickFormatter={(tick) => `${tick} Years`} 
                     label={{ 
                         value: 'Time (Years)', 
                         position: 'insideBottom', 
-                        dy: 20, // Vertical offset for label
+                        dy: 20,
                         style: { fontSize: '14px', fill: '#333' } 
                     }} 
                     tick={{ fontSize: '12px', fill: '#666' }}
                 />
-    
-                {/* Y-Axis with Adjusted Label Positioning */}
                 <YAxis 
                     label={{ 
                         value: `${selectedVariable} (Unit)`, 
                         angle: -90, 
                         position: 'insideLeft', 
-                        dx: -60, // Move the label closer to the center horizontally
+                        dx: -60,
                         dy: 150,
                         style: { fontSize: '14px', fill: '#333' },
-                        textAnchor: 'start' // Center-align vertically
+                        textAnchor: 'start'
                     }} 
                     tick={{ fontSize: '12px', fill: '#666' }} 
                     tickFormatter={(value) => value.toExponential(2)}
                 />
-
-                {/* <YAxis
-                    label={{
-                        value: `${selectedVariable} (Unit)`, 
-                        angle: 0, // No rotation to align horizontally
-                        position: 'insideLeft', // Inside the left side of the chart
-                        dx: -10, // Fine-tune the horizontal position
-                        dy: 250, // Move the label down to align with the bottom of the Y-axis
-                        style: { fontSize: '14px', fill: '#333' },
-                        textAnchor: 'start' // Align text from the start (top-left)
-                    }}
-                    tick={{ fontSize: '12px', fill: '#666' }}
-                    tickFormatter={(value) => value.toExponential(2)}
-                /> */}
-
-    
                 <Tooltip
                     formatter={(value) => value.toLocaleString('en-US', { maximumFractionDigits: 2 })} 
                     labelFormatter={(label) => `Year: ${label}`} 
                 />
-    
                 <Legend 
                     verticalAlign="top" 
                     align="center" 
                     wrapperStyle={{ fontSize: '14px', marginBottom: '10px' }} 
                 />
-    
                 <Line 
                     type="monotone" 
                     dataKey="value" 
@@ -137,10 +174,6 @@ const Plots = ({ job }) => {
             </LineChart>
         </ResponsiveContainer>
     );
-    
-        
-    
-    
 
     return (
         <div>
@@ -169,9 +202,6 @@ const Plots = ({ job }) => {
                 </label>
             </div>
             {renderLineChart()}
-            {/* <div style={gridContainerStyle}>
-                {renderLineChart()}
-            </div> */}
         </div>
     );
 };
