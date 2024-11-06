@@ -22,7 +22,7 @@ const Plots = ({ job }) => {
 
     const fetchDataFiles = async () => {
         try {
-            const response = await axios.get(`http://localhost:8001/get_data_files_list/${job.name}`);
+            const response = await axios.get(`http://locahost:8001/get_data_files_list/${job.name}`);
             setDataFiles(response.data);
         } catch (error) {
             console.error('Error fetching data files:', error);
@@ -31,7 +31,7 @@ const Plots = ({ job }) => {
 
     const fetchVariables = async (selectedFile) => {
         try {
-            const response = await axios.get(`http://localhost:8001/get-variables/${job.name}/${selectedFile}`);
+            const response = await axios.get(`http://locahost:8001/get-variables/${job.name}/${selectedFile}`);
             setVariables(response.data);
         } catch (error) {
             console.error('Error fetching variables:', error);
@@ -56,7 +56,7 @@ const Plots = ({ job }) => {
 
     const fetchInitialPlotData = async (dataFile, variable) => {
         try {
-            const response = await axios.post('http://localhost:8001/get-plot-data', {
+            const response = await axios.post('http://locahost:8001/get-plot-data', {
                 job_name: job.name,
                 data_file_name: dataFile,
                 variable: variable
@@ -69,7 +69,7 @@ const Plots = ({ job }) => {
     };
 
     const startSSEStream = (dataFile, variable) => {
-        const sseUrl = `http://localhost:8001/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
+        const sseUrl = `http://locahost:8001/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
         const newEventSource = new EventSource(sseUrl);
         newEventSource.onmessage = (event) => {
             const [x, y] = event.data.split(",").map(Number);
@@ -99,6 +99,42 @@ const Plots = ({ job }) => {
         const pdf = new jsPDF();
         pdf.addImage(imageData, "PNG", 10, 10, 180, 100);
         pdf.save("chart.pdf");
+    };
+
+    const exportPlotDataAsPDF = () => {
+        const pdf = new jsPDF();
+
+        // Title and metadata
+        pdf.setFontSize(16);
+        pdf.text("Plot Data Exploration", 10, 10);
+        pdf.setFontSize(12);
+        pdf.text(`Data File: ${selectedDataFile}`, 10, 20);
+        pdf.text(`Variable: ${selectedVariable}`, 10, 30);
+
+        // Data summary
+        pdf.text("Data Summary:", 10, 50);
+        const summary = {
+            min: Math.min(...chartData.map(d => d.value)),
+            max: Math.max(...chartData.map(d => d.value)),
+            mean: (chartData.reduce((acc, d) => acc + d.value, 0) / chartData.length).toFixed(2)
+        };
+        pdf.text(`Min: ${summary.min}`, 10, 60);
+        pdf.text(`Max: ${summary.max}`, 10, 70);
+        pdf.text(`Mean: ${summary.mean}`, 10, 80);
+
+        // Data points table
+        pdf.text("Data Points:", 10, 100);
+        let yPosition = 110;
+        chartData.forEach((data, index) => {
+            pdf.text(`Point ${index + 1}: X = ${data.name}, Y = ${data.value}`, 10, yPosition);
+            yPosition += 10;
+            if (yPosition > 280) {
+                pdf.addPage();
+                yPosition = 10;
+            }
+        });
+
+        pdf.save("plot_data_exploration.pdf");
     };
 
     const renderLineChart = () => (
@@ -198,6 +234,24 @@ const Plots = ({ job }) => {
                     onMouseOut={(e) => e.target.style.backgroundColor = '#4A90E2'}
                 >
                     Export Plot
+                </button>
+                <button 
+                    onClick={exportPlotDataAsPDF} 
+                    style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#4CAF50',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        transition: 'background-color 0.3s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#388E3C'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#4CAF50'}
+                >
+                    Export Data
                 </button>
             </div>
             {renderLineChart()}
