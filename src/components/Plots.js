@@ -3,6 +3,7 @@ import axios from "axios";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import "jspdf-autotable"; // Import jspdf-autotable for table formatting in PDF
 
 const Plots = ({ job }) => {
     const [dataFiles, setDataFiles] = useState([]);
@@ -93,13 +94,74 @@ const Plots = ({ job }) => {
     const exportChartAsPDF = async () => {
         const chartElement = chartRef.current;
         if (!chartElement) return;
-
-        const canvas = await html2canvas(chartElement);
+    
+        // Capture chart with a high resolution
+        const canvas = await html2canvas(chartElement, { scale: 3 });
         const imageData = canvas.toDataURL("image/png");
-        const pdf = new jsPDF();
-        pdf.addImage(imageData, "PNG", 10, 10, 180, 100);
-        pdf.save("chart.pdf");
-    };
+    
+        // Create a PDF with A4 dimensions in landscape mode
+        const pdf = new jsPDF("landscape", "mm", "a4");
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+    
+        // Draw a blank full-page rectangle to ensure full A4 length
+        pdf.setFillColor(255, 255, 255); // White background
+        pdf.rect(0, 0, pdfWidth, pdfHeight, "F");
+    
+        // Add title with enhanced styling
+        pdf.setFontSize(16);
+        pdf.setTextColor(0, 0, 0); // Black color
+        pdf.text("Exploratory Plot of Selected Variable", 10, 15);
+    
+        // Add metadata with subtle grey color
+        pdf.setFontSize(12);
+        pdf.setTextColor(100, 100, 100); // Grey color for metadata
+        pdf.text(`Data File: ${selectedDataFile}`, 10, 25);
+        pdf.text(`Variable: ${selectedVariable}`, 10, 35);
+        pdf.text("X-Axis: Time (Years)", 10, 45);
+        pdf.text(`Y-Axis: ${selectedVariable} (Unit)`, 10, 55);
+    
+        // Draw a separator line before data summary
+        pdf.setDrawColor(200, 200, 200); // Light grey for separator
+        pdf.line(10, 60, pdfWidth - 10, 60);
+    
+        // Data Summary in table format with colored header
+        pdf.setTextColor(0, 0, 255); // Blue for data summary title
+        pdf.text("Data Summary:", 10, 70);
+        pdf.setTextColor(0, 0, 0); // Black for table content
+        pdf.autoTable({
+            startY: 75,
+            head: [['Min Value', 'Max Value', 'Mean Value']],
+            body: [[
+                Math.min(...chartData.map(d => d.value)).toFixed(2),
+                Math.max(...chartData.map(d => d.value)).toFixed(2),
+                (chartData.reduce((acc, d) => acc + d.value, 0) / chartData.length).toFixed(2)
+            ]],
+            theme: 'grid', // Simple table styling
+            headStyles: { fillColor: [74, 144, 226], textColor: [255, 255, 255] }, // Blue header with white text
+            margin: { left: 10, right: 10 }
+        });
+    
+        // Calculate image size to fit within A4 landscape dimensions, maximizing height
+        const imgWidth = pdfWidth - 20; // Leave a small margin on both sides
+        const imgHeight = Math.min((canvas.height * imgWidth) / canvas.width, pdfHeight - 140); // Adjust to fit within remaining space
+    
+        // Add the high-resolution chart image, maximizing height to fit naturally
+        pdf.addImage(imageData, "PNG", 10, 115, imgWidth, imgHeight);
+    
+        // Draw a separator line before footer
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(10, pdfHeight - 20, pdfWidth - 10, pdfHeight - 20);
+    
+        // Footer with date and job information
+        const exportDate = new Date().toLocaleDateString();
+        pdf.setFontSize(10);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(`Exported on: ${exportDate}`, 10, pdfHeight - 10);
+        pdf.text(`Job: ${job.name || 'N/A'}`, pdfWidth - 60, pdfHeight - 10);
+    
+        pdf.save("enhanced_plot.pdf");
+    };                                      
 
     const exportPlotDataAsPDF = () => {
         const pdf = new jsPDF();
@@ -111,27 +173,25 @@ const Plots = ({ job }) => {
         pdf.text(`Data File: ${selectedDataFile}`, 10, 20);
         pdf.text(`Variable: ${selectedVariable}`, 10, 30);
 
-        // Data summary
+        // Data summary table
         pdf.text("Data Summary:", 10, 50);
-        const summary = {
-            min: Math.min(...chartData.map(d => d.value)),
-            max: Math.max(...chartData.map(d => d.value)),
-            mean: (chartData.reduce((acc, d) => acc + d.value, 0) / chartData.length).toFixed(2)
-        };
-        pdf.text(`Min: ${summary.min}`, 10, 60);
-        pdf.text(`Max: ${summary.max}`, 10, 70);
-        pdf.text(`Mean: ${summary.mean}`, 10, 80);
+        pdf.autoTable({
+            startY: 55,
+            head: [['Min', 'Max', 'Mean']],
+            body: [[
+                Math.min(...chartData.map(d => d.value)).toFixed(2),
+                Math.max(...chartData.map(d => d.value)).toFixed(2),
+                (chartData.reduce((acc, d) => acc + d.value, 0) / chartData.length).toFixed(2)
+            ]]
+        });
 
         // Data points table
-        pdf.text("Data Points:", 10, 100);
-        let yPosition = 110;
-        chartData.forEach((data, index) => {
-            pdf.text(`Point ${index + 1}: X = ${data.name}, Y = ${data.value}`, 10, yPosition);
-            yPosition += 10;
-            if (yPosition > 280) {
-                pdf.addPage();
-                yPosition = 10;
-            }
+        pdf.text("Data Points:", 10, 80);
+        const dataPoints = chartData.map((data, index) => [index + 1, data.name, data.value.toFixed(2)]);
+        pdf.autoTable({
+            startY: 85,
+            head: [['SNo', 'X', 'Y']],
+            body: dataPoints
         });
 
         pdf.save("plot_data_exploration.pdf");
