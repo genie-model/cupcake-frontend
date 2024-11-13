@@ -23,7 +23,7 @@ const Plots = ({ job }) => {
 
     const fetchDataFiles = async () => {
         try {
-            const response = await axios.get(`http://locahost:8001/get_data_files_list/${job.name}`);
+            const response = await axios.get(`http://localhost:8001/get_data_files_list/${job.name}`);
             setDataFiles(response.data);
         } catch (error) {
             console.error('Error fetching data files:', error);
@@ -32,7 +32,7 @@ const Plots = ({ job }) => {
 
     const fetchVariables = async (selectedFile) => {
         try {
-            const response = await axios.get(`http://locahost:8001/get-variables/${job.name}/${selectedFile}`);
+            const response = await axios.get(`http://localhost:8001/get-variables/${job.name}/${selectedFile}`);
             setVariables(response.data);
         } catch (error) {
             console.error('Error fetching variables:', error);
@@ -57,7 +57,7 @@ const Plots = ({ job }) => {
 
     const fetchInitialPlotData = async (dataFile, variable) => {
         try {
-            const response = await axios.post('http://locahost:8001/get-plot-data', {
+            const response = await axios.post('http://localhost:8001/get-plot-data', {
                 job_name: job.name,
                 data_file_name: dataFile,
                 variable: variable
@@ -70,7 +70,7 @@ const Plots = ({ job }) => {
     };
 
     const startSSEStream = (dataFile, variable) => {
-        const sseUrl = `http://locahost:8001/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
+        const sseUrl = `http://localhost:8001/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
         const newEventSource = new EventSource(sseUrl);
         newEventSource.onmessage = (event) => {
             const [x, y] = event.data.split(",").map(Number);
@@ -197,6 +197,33 @@ const Plots = ({ job }) => {
         pdf.save("plot_data_exploration.pdf");
     };
 
+    const exportPlotDataAsCSV = () => {
+        if (!chartData.length) return;
+    
+        const csvRows = [];
+        // Add headers
+        csvRows.push(['X Value', 'Y Value']);
+        
+        // Add data rows
+        chartData.forEach(({ name, value }) => {
+            csvRows.push([name, value]);
+        });
+    
+        // Create a Blob and URL for CSV download
+        const csvContent = csvRows.map(e => e.join(",")).join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+    
+        // Create a download link and click it
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "plot_data.csv";
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const renderLineChart = () => (
         <div ref={chartRef}>
             <ResponsiveContainer width="100%" height={400}>
@@ -296,7 +323,7 @@ const Plots = ({ job }) => {
                     Export Plot
                 </button>
                 <button 
-                    onClick={exportPlotDataAsPDF} 
+                    onClick={exportPlotDataAsCSV} 
                     style={{
                         padding: '8px 16px',
                         backgroundColor: '#4CAF50',
