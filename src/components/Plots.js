@@ -162,7 +162,10 @@ const Plots = ({ job }) => {
                     <XAxis 
                         dataKey="name" 
                         domain={['auto', 'auto']}
-                        tickFormatter={(tick) => (typeof tick === 'number' ? tick.toFixed(2) : tick)}
+                        tickFormatter={(tick) => {
+                            const numericTick = Number(tick); 
+                            return !isNaN(numericTick) ? Math.ceil(numericTick / 10) * 10 : tick; // Round up to the nearest 10
+                        }}
                         label={{ 
                             value: 'Time (Years)', 
                             position: 'insideBottom', 
@@ -184,7 +187,13 @@ const Plots = ({ job }) => {
                         tick={{ fontSize: '12px', fill: '#666' }} 
                         tickFormatter={(value) => value.toExponential(2)}
                     />
-                    <Tooltip formatter={(value) => value.toFixed(2)} labelFormatter={(label) => `Year: ${label}`} />
+                    <Tooltip 
+                        formatter={(value) => value.toFixed(2)} 
+                        labelFormatter={(label) => {
+                            const numericLabel = Number(label); // Convert label to a number
+                            return !isNaN(numericLabel) ? `Year: ${Math.round(numericLabel)}` : `Year: ${label}`; // Round if numeric
+                        }} 
+                    />
                     <Legend 
                         verticalAlign="top" 
                         align="center" 
