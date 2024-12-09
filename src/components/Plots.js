@@ -56,10 +56,10 @@ const Plots = ({ job }) => {
     };
 
     const preprocessDataForEvenSpacing = (data) => {
-        const minX = Math.min(...data.map((d) => d.name));
-        const maxX = Math.max(...data.map((d) => d.name));
-        const step = (maxX - minX) / (data.length - 1);
-
+        const minX = Math.floor(Math.min(...data.map((d) => d.name)) / 10) * 10; // Round down to nearest 10
+        const maxX = Math.ceil(Math.max(...data.map((d) => d.name)) / 10) * 10;  // Round up to nearest 10
+        const step = 10; // Interval for even spacing
+    
         const evenlySpacedData = [];
         for (let x = minX; x <= maxX; x += step) {
             const closestPoint = data.reduce((prev, curr) =>
@@ -69,6 +69,31 @@ const Plots = ({ job }) => {
         }
         return evenlySpacedData;
     };
+
+    const getAdaptiveTicks = (data) => {
+        const minX = Math.min(...data.map((d) => d.name));
+        const maxX = Math.max(...data.map((d) => d.name));
+    
+        // Calculate range
+        const range = maxX - minX;
+    
+        // Determine step size based on range (scale adaptively)
+        let step;
+        if (range <= 100) {
+            step = 10; // Small range, smaller step
+        } else if (range <= 1000) {
+            step = 100; // Medium range
+        } else {
+            step = Math.pow(10, Math.floor(Math.log10(range)) - 1); // Scale for large ranges
+        }
+    
+        // Generate tick values
+        const ticks = [];
+        for (let x = Math.ceil(minX / step) * step; x <= maxX; x += step) {
+            ticks.push(x);
+        }
+        return ticks;
+    };    
 
     const fetchInitialPlotData = async (dataFile, variable) => {
         try {
@@ -160,18 +185,16 @@ const Plots = ({ job }) => {
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                     <XAxis 
-                        dataKey="name" 
-                        domain={['auto', 'auto']}
-                        tickFormatter={(tick) => {
-                            const numericTick = Number(tick); 
-                            return !isNaN(numericTick) ? Math.ceil(numericTick / 10) * 10 : tick; // Round up to the nearest 10
-                        }}
+                        dataKey="name"
+                        ticks={getAdaptiveTicks(chartData)} 
+                        domain={['dataMin', 'dataMax']}
+                        interval={0} // Render all ticks
                         label={{ 
                             value: 'Time (Years)', 
                             position: 'insideBottom', 
                             dy: 20,
                             style: { fontSize: '14px', fill: '#333' } 
-                        }} 
+                        }}
                         tick={{ fontSize: '12px', fill: '#666' }}
                     />
                     <YAxis 
