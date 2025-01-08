@@ -1,5 +1,5 @@
 # Node modules directory
 node_modules/
 
-# Lock file
-package-lock.json
+# Log file
+log_file.log
