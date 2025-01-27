@@ -50,7 +50,7 @@ function HomePage() {
 
   const handleSelectJob = async (jobName) => {
     try {
-      const response = await axios.get(`http://localhost:8001/job/${jobName}`);
+      const response = await axios.get(`http://localhost:8000/job/${jobName}`);
       setSelectedJob(response.data.job);
     } catch (err) {
       console.error("Error fetching job data:", err);
@@ -59,7 +59,7 @@ function HomePage() {
 
   const handleAddJob = async () => {
     try {
-      const response = await axios.post("http://localhost:8001/add-job", {
+      const response = await axios.post("http://localhost:8000/add-job", {
         job_name: newJobName,
       });
       alert(response.data.message);
@@ -78,7 +78,7 @@ function HomePage() {
 
   const handleDeleteJob = async () => {
     try {
-      const response = await axios.delete("http://localhost:8001/delete-job");
+      const response = await axios.delete("http://localhost:8000/delete-job");
       alert(response.data.message);
       setShowModal(false);
       refreshJobs(); // Refresh the job list after deleting the job
@@ -95,7 +95,7 @@ function HomePage() {
   // Define the function to handle running the job
   const handleRunJob = async () => {
     try {
-      const response = await axios.post("http://localhost:8001/run-job");
+      const response = await axios.post("http://localhost:8000/run-job");
       alert(response.data.message); // Display success message
       setShowModal(false); // Close modal after running the job
       refreshJobs(); // Refresh job status after running
@@ -111,7 +111,7 @@ function HomePage() {
 
   const handlePauseJob = async () => {
     try {
-      const response = await axios.post("http://localhost:8001/pause-job");
+      const response = await axios.post("http://localhost:8000/pause-job");
       alert(response.data.message); // Display success message
       setShowModal(false); // Close modal after pausing the job
       refreshJobs(); // Refresh job status after pausing
@@ -145,7 +145,7 @@ function HomePage() {
 
   const refreshJobDetails = async (jobName) => {
     try {
-      const response = await axios.get(`http://localhost:8001/job/${jobName}`);
+      const response = await axios.get(`http://localhost:8000/job/${jobName}`);
       setSelectedJob(response.data.job);
     } catch (err) {
       console.error("Error refreshing job data:", err);
@@ -224,7 +224,7 @@ function HomePage() {
     const fetchJobDetails = async () => {
       try {
         const response = await axios.get(
-          `http://localhost:8001/job/${selectedJob.name}`,
+          `http://localhost:8000/job/${selectedJob.name}`,
         );
         const updatedJob = response.data.job;
 

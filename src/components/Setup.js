@@ -17,7 +17,7 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
     const fetchJobDetails = async () => {
       try {
         const response = await axios.get(
-          `http://localhost:8001/setup/${selectedJob.name}`,
+          `http://localhost:8000/setup/${selectedJob.name}`,
         );
         const setup = response.data.setup;
         setJobDetails(setup);
@@ -39,9 +39,9 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
           userConfigsResponse,
           completedJobsResponse,
         ] = await Promise.all([
-          axios.get("http://localhost:8001/base-configs"),
-          axios.get("http://localhost:8001/user-configs"),
-          axios.get("http://localhost:8001/completed-jobs"), // Fetch completed jobs
+          axios.get("http://localhost:8000/base-configs"),
+          axios.get("http://localhost:8000/user-configs"),
+          axios.get("http://localhost:8000/completed-jobs"), // Fetch completed jobs
         ]);
         setBaseConfigs(baseConfigsResponse.data.base_configs || []);
         setUserConfigs(userConfigsResponse.data.user_configs || []);
@@ -60,7 +60,7 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
   const handleSaveChanges = async () => {
     try {
       const response = await axios.post(
-        `http://localhost:8001/setup/${selectedJob.name}`,
+        `http://localhost:8000/setup/${selectedJob.name}`,
         {
           base_config: baseConfig,
           user_config: userConfig,

@@ -117,3 +117,31 @@ sh
 pm2 stop my-app
 
 This updated README file should be more structured and easier to read.
+
+
+                                                ------------
+                                                Docker Steps
+                                                ------------
+
+1. Build using: "docker build -t cupcake-frontend:1.0 ."
+
+2. Run using: "docker run -d --name cupcake-frontend-container -p 3000:3000 cupcake-frontend:1.0"
+
+3. Tag The docker image using: "docker tag cupcake-frontend:1.0 us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0"
+
+4. Set the docker, config using: "gcloud auth configure-docker us-west2-docker.pkg.dev"
+
+5. Push the docker image using: "docker push us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0"
+
+6. Pull the docker image using below steps:
+    
+    a. In same machine as the one that pushed the image, just use 
+        -- "docker pull us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0"
+    
+    b. In some other machine or with some other account with similar access permissions use below steps:
+       (These steps are needed mostly if docker is being run with sudo):
+       -- sudo mkdir -p /root/.dockerr
+       -- sudo cp ~/.docker/config.json /root/.docker/config.json
+       -- sudo docker pull us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+
+7. Rename the pulled docker image using: "docker tag us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0 cupcake-frontend:1.0"

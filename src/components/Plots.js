@@ -23,7 +23,7 @@ const Plots = ({ job }) => {
 
     const fetchDataFiles = async () => {
         try {
-            const response = await axios.get(`http://localhost:8001/get_data_files_list/${job.name}`);
+            const response = await axios.get(`http://localhost:8000/get_data_files_list/${job.name}`);
             setDataFiles(response.data);
         } catch (error) {
             console.error('Error fetching data files:', error);
@@ -32,7 +32,7 @@ const Plots = ({ job }) => {
 
     const fetchVariables = async (selectedFile) => {
         try {
-            const response = await axios.get(`http://localhost:8001/get-variables/${job.name}/${selectedFile}`);
+            const response = await axios.get(`http://localhost:8000/get-variables/${job.name}/${selectedFile}`);
             setVariables(response.data);
         } catch (error) {
             console.error('Error fetching variables:', error);
@@ -97,7 +97,7 @@ const Plots = ({ job }) => {
 
     const fetchInitialPlotData = async (dataFile, variable) => {
         try {
-            const response = await axios.post('http://localhost:8001/get-plot-data', {
+            const response = await axios.post('http://localhost:8000/get-plot-data', {
                 job_name: job.name,
                 data_file_name: dataFile,
                 variable: variable
@@ -111,7 +111,7 @@ const Plots = ({ job }) => {
     };
 
     const startSSEStream = (dataFile, variable) => {
-        const sseUrl = `http://localhost:8001/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
+        const sseUrl = `http://localhost:8000/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
         const newEventSource = new EventSource(sseUrl);
         newEventSource.onmessage = (event) => {
             const [x, y] = event.data.split(",").map(Number);

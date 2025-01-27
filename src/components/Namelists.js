@@ -14,7 +14,7 @@ const Namelists = ({ job }) => {
       // Fetch namelists for the selected job
       setLoadingNamelists(true);
       axios
-        .get(`http://localhost:8001/jobs/${job.name}/namelists`)
+        .get(`http://localhost:8000/jobs/${job.name}/namelists`)
         .then((response) => {
           setNamelists(response.data.namelists);
           if (response.data.namelists.length > 0) {
@@ -46,7 +46,7 @@ const Namelists = ({ job }) => {
       setLoadingContent(true);
       axios
         .get(
-          `http://localhost:8001/jobs/${encodeURIComponent(
+          `http://localhost:8000/jobs/${encodeURIComponent(
             job.name,
           )}/namelists/${encodeURIComponent(namelistName)}`,
         )
