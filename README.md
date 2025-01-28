@@ -4,9 +4,6 @@ a. sudo apt update
 b. sudo apt install nodejs
 c. sudo apt install npm
 
-
-
-
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
@@ -119,29 +116,71 @@ pm2 stop my-app
 This updated README file should be more structured and easier to read.
 
 
-                                                ------------
-                                                Docker Steps
-                                                ------------
+# Cupcake Frontend Docker Steps
 
-1. Build using: "docker build -t cupcake-frontend:1.0 ."
+This guide provides the steps to build, tag, push, pull, and rename Docker images for the **Cupcake Frontend** project.
 
-2. Run using: "docker run -d --name cupcake-frontend-container -p 3000:3000 cupcake-frontend:1.0"
+---
 
-3. Tag The docker image using: "docker tag cupcake-frontend:1.0 us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0"
+## Steps to Build and Run the Docker Image
 
-4. Set the docker, config using: "gcloud auth configure-docker us-west2-docker.pkg.dev"
+#### 1. Build the Docker Image
+To build the Docker image, run:
+```bash
+docker build -t cupcake-frontend:1.0 .
+```
+#### 2. Run the Docker Image
+To run the Docker container in detached mode with port mapping:
 
-5. Push the docker image using: "docker push us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0"
+```
+docker run -d --name cupcake-frontend-container -p 3000:3000 cupcake-frontend:1.0
+```
 
-6. Pull the docker image using below steps:
-    
-    a. In same machine as the one that pushed the image, just use 
-        -- "docker pull us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0"
-    
-    b. In some other machine or with some other account with similar access permissions use below steps:
-       (These steps are needed mostly if docker is being run with sudo):
-       -- sudo mkdir -p /root/.dockerr
-       -- sudo cp ~/.docker/config.json /root/.docker/config.json
-       -- sudo docker pull us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+###  Steps to Tag, Push, and Configure Docker Image in Google Cloud
+#### 1. Tag the Docker Image
+Assign a tag to the Docker image for Google Container Registry:
 
-7. Rename the pulled docker image using: "docker tag us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0 cupcake-frontend:1.0"
+```
+docker tag cupcake-frontend:1.0 us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+```
+#### 2. Configure Docker for Google Cloud
+1. Configure Docker to authenticate with Google Container Registry:
+```
+gcloud auth configure-docker us-west2-docker.pkg.dev
+```
+2. Push the Docker Image
+Push the tagged Docker image to Google Container Registry:
+```
+docker push us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+```
+3. Pull the Docker Image
+a. On the Same Machine as the Push:
+If you are on the same machine where the image was pushed, use:
+```
+docker pull us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+```
+b. On a Different Machine or Account:
+If pulling from another machine or account with appropriate permissions (especially with sudo):
+
+Create the .docker directory for root:
+```
+sudo mkdir -p /root/.docker
+```
+Copy the config.json for Docker authentication:
+```
+sudo cp ~/.docker/config.json /root/.docker/config.json
+```
+Pull the Docker image:
+```
+sudo docker pull us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+```
+#### 3. Rename the Docker Image
+
+To rename the pulled image for local use:
+```
+docker tag us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0 cupcake-frontend:1.0
+```
+# Notes
+1. Ensure you have sufficient permissions to access Google Container Registry.
+2. Adjust the version tag (1.0) as required for different builds.
+3. Use sudo for Docker commands if necessary in your environment.
