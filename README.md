@@ -184,3 +184,187 @@ docker tag us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-f
 1. Ensure you have sufficient permissions to access Google Container Registry.
 2. Adjust the version tag (1.0) as required for different builds.
 3. Use sudo for Docker commands if necessary in your environment.
+
+
+
+# 🧁 CupCake Frontend - Kubernetes Deployment Guide
+
+This guide outlines how to deploy the CupCake Frontend application on a Google Kubernetes Engine (GKE) cluster.
+
+---
+
+## 🚀 **1. Prerequisites**
+Ensure you have the following installed:
+
+- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) for Kubernetes
+- [GKE Auth Plugin](https://cloud.google.com/kubernetes-engine/docs/how-to/cluster-access-for-kubectl#install_plugin)
+
+To verify installations:
+```bash
+gcloud version
+kubectl version --client
+```
+
+---
+
+## ☁️ **2. Deploy CupCake Frontend to GKE**
+
+### **2.1 Enable GKE and Create Cluster**
+Ensure GKE API is enabled:
+```bash
+gcloud services enable container.googleapis.com
+```
+
+Create GKE cluster(it is already created, create only if new cluster needs to be created):
+```bash
+gcloud container clusters create cupcake-cluster \
+    --region us-west2 \
+    --num-nodes=2 \
+    --enable-autoupgrade
+```
+
+Connect `kubectl` to the cluster:
+```bash
+gcloud container clusters get-credentials cupcake-cluster --region us-west2
+```
+
+---
+
+### **2.2 Deploy Frontend App to GKE**
+
+1. **Push Docker image to Google Artifact Registry (GAR):**
+```bash
+gcloud auth configure-docker us-west2-docker.pkg.dev
+
+# Tag and push the image
+docker tag cupcake-frontend:1.0 us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+docker push us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+```
+
+2. **Create Kubernetes manifests:(needs to be done only once per cluster) **
+- `deployment.yaml`:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cupcake-frontend-deployment
+  labels:
+    app: cupcake-frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cupcake-frontend
+  template:
+    metadata:
+      labels:
+        app: cupcake-frontend
+    spec:
+      containers:
+      - name: cupcake-frontend
+        image: us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: API_URL
+          value: "http://cupcake.ctoaster.org:8000"
+        imagePullPolicy: Always
+```
+
+- `service.yaml`:
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cupcake-frontend-service
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 3000
+  selector:
+    app: cupcake-frontend
+```
+
+3. **Deploy to GKE:**
+```bash
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+```
+
+4. **Check status:**
+```bash
+kubectl get pods
+kubectl get svc
+```
+
+Expected output:
+```
+NAME                                           READY   STATUS    RESTARTS   AGE
+cupcake-frontend-deployment-abc123              1/1     Running   0          10s
+```
+
+**Find External IP:**
+```bash
+kubectl get svc
+```
+Expected output:
+```
+NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)        AGE
+cupcake-frontend-service   LoadBalancer   34.118.232.251  34.94.127.96    80:31234/TCP   5m
+```
+
+Access the app:
+```
+http://34.94.127.96
+```
+
+---
+
+## 🔍 **3. Monitoring & Troubleshooting**
+
+1. **Check pod status:**
+```bash
+kubectl get pods
+```
+
+2. **View pod logs:**
+```bash
+kubectl logs -f <pod-name>
+```
+
+3. **Check deployment:**
+```bash
+kubectl describe deployment cupcake-frontend-deployment
+```
+
+4. **Check service and external IP:**
+```bash
+kubectl get svc
+```
+
+---
+
+## 🧹 **4. Cleanup (Optional)**
+To delete the GKE cluster and avoid billing:
+```bash
+# Delete cluster
+gcloud container clusters delete cupcake-cluster --region us-west2
+
+# Delete Docker image from GAR
+gcloud artifacts docker images delete us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0
+```
+
+---
+
+## 📞 **5. Support**
+For any issues or further assistance:
+- Check GKE logs: `kubectl describe pod <pod-name>`
+- Visit [Google Kubernetes Engine Docs](https://cloud.google.com/kubernetes-engine/docs)
+- Contact the project admin or Slack channel.
+
+---
+
+🎉 **That's it! Your CupCake frontend is now running on Kubernetes!**
+
