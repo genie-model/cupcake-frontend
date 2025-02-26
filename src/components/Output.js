@@ -39,8 +39,9 @@ const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
     // Function to fetch existing log content
     const fetchLogContent = async () => {
       try {
+        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
         const response = await axios.get(
-          `http://localhost:8000/get-log/${job.name}`,
+            `${apiUrl}/get-log/${job.name}`
         );
         const content = response.data.content;
         if (content) {
@@ -78,10 +79,11 @@ const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
     fetchLogContent();
 
     // Establish connection to the job-specific output streaming API
+    const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
     eventSourceRef.current = new EventSource(
-      `http://localhost:8000/stream-output/${job.name}`,
+      `${apiUrl}/stream-output/${job.name}`
     );
-
+    
     eventSourceRef.current.onmessage = (event) => {
       const newLine = event.data + "\n";
       outputQueue.current.push(newLine);

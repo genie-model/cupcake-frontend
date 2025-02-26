@@ -17,7 +17,7 @@ spec:
       containers:
       - name: cupcake-frontend
         image: us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0  # Use your Docker image tag
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 3000  # Expose the app's port inside the pod
         resources:
@@ -28,8 +28,8 @@ spec:
             cpu: "500m"
             memory: "512Mi"
         env:  # (Optional) Add environment variables if needed
-        - name: API_URL
-          value: "http://cupcake.ctoaster.org:8000"
+        - name: REACT_APP_API_URL
+          value: "http://35.235.72.29"
         livenessProbe:  # Check if the container is alive
           httpGet:
             path: /
