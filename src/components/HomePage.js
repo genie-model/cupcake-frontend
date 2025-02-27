@@ -150,7 +150,8 @@ function HomePage() {
 
   const refreshJobDetails = async (jobName) => {
     try {
-      const response = await axios.get(`http://localhost:8000/job/${jobName}`);
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+      const response = await axios.get(`${apiUrl}/job/${jobName}`);
       setSelectedJob(response.data.job);
     } catch (err) {
       console.error("Error refreshing job data:", err);
@@ -228,9 +229,8 @@ function HomePage() {
     // Function to fetch and update job details
     const fetchJobDetails = async () => {
       try {
-        const response = await axios.get(
-          `http://localhost:8000/job/${selectedJob.name}`,
-        );
+        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+        const response = await axios.get(`${apiUrl}/job/${selectedJob.name}`);
         const updatedJob = response.data.job;
 
         // Check if the job status has changed
