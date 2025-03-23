@@ -93,7 +93,9 @@ const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
   // Fetch the list of jobs
   const fetchJobs = async () => {
     try {
-      const response = await axios.get("http://localhost:8001/jobs");
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+      console.log(":: apiUrl is :: "+ apiUrl);
+      const response = await axios.get(`${apiUrl}/jobs`);
       const jobList = response.data.jobs.map((job) => ({
         heading: job.name,
         child: {},

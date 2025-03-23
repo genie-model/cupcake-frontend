@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cupcake-frontend-deployment
+  labels:
+    app: cupcake-frontend
+spec:
+  replicas: 3  # Adjust based on load
+  selector:
+    matchLabels:
+      app: cupcake-frontend
+  template:
+    metadata:
+      labels:
+        app: cupcake-frontend
+    spec:
+      containers:
+      - name: cupcake-frontend
+        image: us-west2-docker.pkg.dev/ucr-ursa-major-ridgwell-lab/cupcake/cupcake-frontend:1.0  # Use your Docker image tag
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000  # Expose the app's port inside the pod
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        env:  # (Optional) Add environment variables if needed
+        - name: REACT_APP_API_URL
+          value: "http://35.235.72.29"
+        livenessProbe:  # Check if the container is alive
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        readinessProbe:  # Ensure readiness before serving traffic
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5

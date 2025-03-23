@@ -16,9 +16,8 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
   useEffect(() => {
     const fetchJobDetails = async () => {
       try {
-        const response = await axios.get(
-          `http://localhost:8001/setup/${selectedJob.name}`,
-        );
+        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+        const response = await axios.get(`${apiUrl}/setup/${selectedJob.name}`);
         const setup = response.data.setup;
         setJobDetails(setup);
         setInitialSetup(setup); // Save the initial setup
@@ -34,14 +33,15 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
 
     const fetchDropdownValues = async () => {
       try {
+        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
         const [
-          baseConfigsResponse,
-          userConfigsResponse,
-          completedJobsResponse,
+            baseConfigsResponse,
+            userConfigsResponse,
+            completedJobsResponse,
         ] = await Promise.all([
-          axios.get("http://localhost:8001/base-configs"),
-          axios.get("http://localhost:8001/user-configs"),
-          axios.get("http://localhost:8001/completed-jobs"), // Fetch completed jobs
+            axios.get(`${apiUrl}/base-configs`),
+            axios.get(`${apiUrl}/user-configs`),
+            axios.get(`${apiUrl}/completed-jobs`), // Fetch completed jobs
         ]);
         setBaseConfigs(baseConfigsResponse.data.base_configs || []);
         setUserConfigs(userConfigsResponse.data.user_configs || []);
@@ -59,15 +59,16 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
 
   const handleSaveChanges = async () => {
     try {
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
       const response = await axios.post(
-        `http://localhost:8001/setup/${selectedJob.name}`,
-        {
-          base_config: baseConfig,
-          user_config: userConfig,
-          modifications,
-          run_length: runLength,
-          restart_from: restartFrom,
-        },
+          `${apiUrl}/setup/${selectedJob.name}`,
+          {
+              base_config: baseConfig,
+              user_config: userConfig,
+              modifications,
+              run_length: runLength,
+              restart_from: restartFrom,
+          }
       );
       alert(response.data.message);
       // Trigger refresh of job details

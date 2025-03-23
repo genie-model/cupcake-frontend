@@ -13,8 +13,9 @@ const Namelists = ({ job }) => {
     if (job && job.name) {
       // Fetch namelists for the selected job
       setLoadingNamelists(true);
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
       axios
-        .get(`http://localhost:8001/jobs/${job.name}/namelists`)
+        .get(`${apiUrl}/jobs/${job.name}/namelists`)
         .then((response) => {
           setNamelists(response.data.namelists);
           if (response.data.namelists.length > 0) {
@@ -44,11 +45,10 @@ const Namelists = ({ job }) => {
   const fetchNamelistContent = (namelistName) => {
     if (namelistName && job && job.name) {
       setLoadingContent(true);
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
       axios
         .get(
-          `http://localhost:8001/jobs/${encodeURIComponent(
-            job.name,
-          )}/namelists/${encodeURIComponent(namelistName)}`,
+          `${apiUrl}/jobs/${encodeURIComponent(job.name)}/namelists/${encodeURIComponent(namelistName)}`
         )
         .then((response) => {
           setNamelistContent(response.data.content);
