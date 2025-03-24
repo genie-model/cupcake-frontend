@@ -350,7 +350,74 @@ http://34.94.127.96
 
 ---
 
-## 🔍 **3. Monitoring & Troubleshooting**
+# ⚖️ 3 Scaling with Horizontal Pod Autoscaler (HPA)
+
+This guide explains how to automatically scale the number of pods for your Kubernetes deployment based on CPU utilization.
+
+---
+
+### 📌 3.1 Prerequisites
+
+Ensure the following are configured:
+
+- Your Kubernetes deployment defines CPU `requests` and `limits`.
+- The **metrics server** is installed. You can install it using:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+---
+
+### 📄 3.2 Create the HPA YAML
+
+Create a file named `hpa.yaml` with the following contents:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cupcake-frontend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cupcake-frontend-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+```
+
+---
+
+### 🚀 3.3 Apply HPA
+
+Apply the HPA configuration to your cluster:
+
+```bash
+kubectl apply -f hpa.yaml
+```
+
+---
+
+### 🔍 3.4 Monitor HPA
+
+Check the current status and behavior of the HPA using:
+
+```bash
+kubectl get hpa
+kubectl top pods
+```
+
+---
+
+## 🔍 **4. Monitoring & Troubleshooting**
 
 1. **Check pod status:**
 ```bash
@@ -374,7 +441,7 @@ kubectl get svc
 
 ---
 
-## 🧹 **4. Cleanup (Optional)**
+## 🧹 **5. Cleanup (Optional)**
 To delete the GKE cluster and avoid billing:
 ```bash
 # Delete cluster
@@ -386,7 +453,7 @@ gcloud artifacts docker images delete us-west2-docker.pkg.dev/ucr-ursa-major-rid
 
 ---
 
-## 📞 **5. Support**
+## 📞 **6. Support**
 For any issues or further assistance:
 - Check GKE logs: `kubectl describe pod <pod-name>`
 - Visit [Google Kubernetes Engine Docs](https://cloud.google.com/kubernetes-engine/docs)
