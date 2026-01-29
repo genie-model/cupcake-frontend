@@ -127,6 +127,7 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
                 value={baseConfig}
                 onChange={(e) => setBaseConfig(e.target.value)}
               >
+                <option value="">-- Select Base Config --</option>
                 {baseConfigs.map((config, index) => (
                   <option key={index} value={config}>
                     {config}
@@ -140,6 +141,7 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
                 value={userConfig}
                 onChange={(e) => setUserConfig(e.target.value)}
               >
+                <option value="">-- Select User Config --</option>
                 {userConfigs.map((config, index) => (
                   <option key={index} value={config}>
                     {config}

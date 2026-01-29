@@ -24,13 +24,12 @@ function HomePage() {
   // Define icon classes, colors, and types for the job control palette
   const palleteIconClasses = [
     "fas fa-plus",
-    "fa-regular fa-folder",
+    "fa-solid fa-xmark",
     "fas fa-play",
     "fa-solid fa-pause",
-    "fa-solid fa-xmark",
   ];
-  const colors = ["#05a4db", "#cac000", "#88d500", "#dba405", "#fa2e00"];
-  const types = ["Add Job", "Setup", "Run Job", "Pause Job", "Remove Job"];
+  const colors = ["#05a4db", "#fa2e00", "#88d500", "#dba405"];
+  const types = ["Add Job", "Remove Job", "Run Job", "Pause Job"];
 
   const handleIconClick = (type) => {
     if (type === "Pause Job") {
@@ -49,6 +48,10 @@ function HomePage() {
   };
 
   const handleSelectJob = async (jobName) => {
+    if (!jobName) {
+      setSelectedJob(null);
+      return;
+    }
     try {
       const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
       const response = await axios.get(`${apiUrl}/job/${jobName}`);
@@ -67,6 +70,7 @@ function HomePage() {
       alert(response.data.message);
       setShowModal(false);
       refreshJobs(); // Refresh the job list after adding a new job
+      handleSelectJob(newJobName); // Auto-select the newly created job
     } catch (err) {
       console.error("Error adding job:", err);
 
@@ -130,16 +134,24 @@ function HomePage() {
     }
   };
 
-  const palatteIcon = (iconClass, color, type) => {
+  const palatteIcon = (iconClass, color, type, disabled = false) => {
     return (
-      <div className="palatte-icon" onClick={() => handleIconClick(type)}>
+      <div
+        className="palatte-icon"
+        onClick={() => !disabled && handleIconClick(type)}
+        style={{
+          opacity: disabled ? 0.4 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
+          pointerEvents: disabled ? "none" : "auto",
+        }}
+      >
         <a
           className="palatte-icon d-flex justify-content-center align-items-center"
           href="#"
           style={{ textDecoration: "none", paddingTop: "10px" }}
         >
           <span
-            style={{ fontSize: "30px", color: color }}
+            style={{ fontSize: "30px", color: disabled ? "#999" : color }}
             className={iconClass}
           ></span>
         </a>
@@ -264,15 +276,28 @@ function HomePage() {
             <FileStructure
               onSelectJob={handleSelectJob}
               setRefreshJobs={setRefreshJobs}
+              selectedJobName={selectedJob?.name || null}
             />
           </div>
           <div className="content-area">
             <div className="icons">
-              {palleteIconClasses.map((iconClass, index) => (
-                <div key={index}>
-                  {palatteIcon(iconClass, colors[index], types[index])}
-                </div>
-              ))}
+              {palleteIconClasses.map((iconClass, index) => {
+                const type = types[index];
+                const runAllowed =
+                  selectedJob &&
+                  ["RUNNABLE", "PAUSED", "RUNNING"].includes(selectedJob.status);
+                const pauseAllowed =
+                  selectedJob && selectedJob.status === "RUNNING";
+                const isDisabled =
+                  (type === "Remove Job" && !selectedJob) ||
+                  (type === "Run Job" && !runAllowed) ||
+                  (type === "Pause Job" && !pauseAllowed);
+                return (
+                  <div key={index}>
+                    {palatteIcon(iconClass, colors[index], type, isDisabled)}
+                  </div>
+                );
+              })}
             </div>
             <div className="task" style={{ position: "relative" }}>
               <button onClick={() => handleButtonClick("Status")}>

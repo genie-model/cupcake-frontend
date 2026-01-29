@@ -84,11 +84,18 @@ const RenderTree = ({
 };
 
 // Main FileStructure component
-const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
+const FileStructure = ({ onSelectJob, setRefreshJobs, selectedJobName }) => {
   const [jobs, setJobs] = useState([]);
   const [expandedNodes, setExpandedNodes] = useState({});
   const [error, setError] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
+
+  // Sync local selectedJob with parent's selectedJobName (for external selection like job creation)
+  useEffect(() => {
+    if (selectedJobName !== selectedJob) {
+      setSelectedJob(selectedJobName);
+    }
+  }, [selectedJobName]);
 
   // Fetch the list of jobs
   const fetchJobs = async () => {
@@ -96,10 +103,12 @@ const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
       const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
       console.log(":: apiUrl is :: "+ apiUrl);
       const response = await axios.get(`${apiUrl}/jobs`);
-      const jobList = response.data.jobs.map((job) => ({
-        heading: job.name,
-        child: {},
-      }));
+      const jobList = response.data.jobs
+        .map((job) => ({
+          heading: job.name,
+          child: {},
+        }))
+        .sort((a, b) => a.heading.localeCompare(b.heading));
       setJobs(jobList);
     } catch (err) {
       setError(err.message);
@@ -113,15 +122,16 @@ const FileStructure = ({ onSelectJob, setRefreshJobs }) => {
 
   const toggleNode = (heading) => {
     setExpandedNodes((prev) => {
-      const isCollapsed = prev[heading];
-      const newExpandedNodes = { ...prev, [heading]: !isCollapsed };
-      if (heading === "My Jobs" && !isCollapsed) {
+      const wasOpen = !!prev[heading];
+      const nextState = { ...prev, [heading]: !wasOpen };
+      // Clear selection when collapsing "My Jobs"
+      if (heading === "My Jobs" && wasOpen) {
         setSelectedJob(null);
         if (onSelectJob) {
           onSelectJob(null);
         }
       }
-      return newExpandedNodes;
+      return nextState;
     });
   };
 
