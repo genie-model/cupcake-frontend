@@ -57,45 +57,28 @@ const Plots = ({ job }) => {
         startSSEStream(selectedDataFile, selectedVar);
     };
 
-    const preprocessDataForEvenSpacing = (data) => {
-        const minX = Math.floor(Math.min(...data.map((d) => d.name)) / 10) * 10; // Round down to nearest 10
-        const maxX = Math.ceil(Math.max(...data.map((d) => d.name)) / 10) * 10;  // Round up to nearest 10
-        const step = 10; // Interval for even spacing
-    
-        const evenlySpacedData = [];
-        for (let x = minX; x <= maxX; x += step) {
-            const closestPoint = data.reduce((prev, curr) =>
-                Math.abs(curr.name - x) < Math.abs(prev.name - x) ? curr : prev
-            );
-            evenlySpacedData.push({ name: x, value: closestPoint.value });
-        }
-        return evenlySpacedData;
-    };
-
     const getAdaptiveTicks = (data) => {
+        if (!data.length) return [];
+
         const minX = Math.min(...data.map((d) => d.name));
         const maxX = Math.max(...data.map((d) => d.name));
-    
-        // Calculate range
+        if (minX === maxX) return [minX]; // single point case
+
         const range = maxX - minX;
-    
-        // Determine step size based on range (scale adaptively)
-        let step;
-        if (range <= 100) {
-            step = 10; // Small range, smaller step
-        } else if (range <= 1000) {
-            step = 100; // Medium range
-        } else {
-            step = Math.pow(10, Math.floor(Math.log10(range)) - 1); // Scale for large ranges
-        }
-    
-        // Generate tick values
+        const rawStep = range / 8; // target ~8-10 ticks
+        const pow10 = Math.pow(10, Math.floor(Math.log10(rawStep)));
+        const candidates = [1, 2, 2.5, 5, 10].map((m) => m * pow10);
+        const step = candidates.find((c) => range / c <= 12) || candidates[candidates.length - 1];
+
+        const start = Math.ceil(minX / step) * step;
+        const end = Math.floor(maxX / step) * step;
+
         const ticks = [];
-        for (let x = Math.ceil(minX / step) * step; x <= maxX; x += step) {
+        for (let x = start; x <= end + 1e-9; x += step) {
             ticks.push(x);
         }
         return ticks;
-    };    
+    };
 
     const fetchInitialPlotData = async (dataFile, variable) => {
         try {
@@ -106,8 +89,7 @@ const Plots = ({ job }) => {
                 variable: variable
             });
             const initialPlotData = response.data.data.map(([x, y]) => ({ name: x, value: y }));
-            const evenlySpacedData = preprocessDataForEvenSpacing(initialPlotData);
-            setChartData(evenlySpacedData);
+            setChartData(initialPlotData);
         } catch (error) {
             console.error('Error fetching initial plot data:', error);
         }
@@ -128,6 +110,15 @@ const Plots = ({ job }) => {
         setEventSource(newEventSource);
     };
 
+    // Merge new points, deduplicate by x (name), and keep chronological order
+    const mergeAndSortByX = (prevData, buffer) => {
+        if (!buffer.length) return prevData;
+        const merged = [...prevData, ...buffer];
+        const uniqueByX = new Map();
+        merged.forEach((point) => uniqueByX.set(point.name, point));
+        return Array.from(uniqueByX.values()).sort((a, b) => a.name - b.name);
+    };
+
     useEffect(() => {
         return () => {
             if (eventSource) {
@@ -135,6 +126,14 @@ const Plots = ({ job }) => {
             }
         };
     }, [eventSource]);
+
+    // Merge dataBuffer into chartData for real-time updates
+    useEffect(() => {
+        if (dataBuffer.length > 0) {
+            setChartData((prevData) => mergeAndSortByX(prevData, dataBuffer));
+            setDataBuffer([]); // Clear buffer after merging
+        }
+    }, [dataBuffer]);
 
     const exportChartAsPDF = async () => {
         const chartElement = chartRef.current;
@@ -189,10 +188,12 @@ const Plots = ({ job }) => {
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                     <XAxis 
+                        type="number"
+                        scale="linear"
                         dataKey="name"
                         ticks={getAdaptiveTicks(chartData)} 
                         domain={['dataMin', 'dataMax']}
-                        interval={0} // Render all ticks
+                        interval={0} // Render all provided ticks
                         label={{ 
                             value: 'Time (Years)', 
                             position: 'insideBottom', 
