@@ -16,15 +16,29 @@ const Plots = ({ job }) => {
     const chartRef = useRef(null);
 
     useEffect(() => {
-        if (job) {
-            fetchDataFiles();
+        // Close any existing SSE stream when switching jobs
+        if (eventSource) {
+            eventSource.close();
+            setEventSource(null);
+        }
+
+        // Reset plot state for new job
+        setSelectedDataFile('');
+        setSelectedVariable('');
+        setVariables([]);
+        setChartData([]);
+        setDataBuffer([]);
+        setDataFiles([]);
+
+        if (job?.name) {
+            fetchDataFiles(job.name);
         }
     }, [job]);
 
-    const fetchDataFiles = async () => {
+    const fetchDataFiles = async (jobName) => {
         try {
             const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-            const response = await axios.get(`${apiUrl}/get_data_files_list/${job.name}`);
+            const response = await axios.get(`${apiUrl}/get_data_files_list/${jobName}`);
             setDataFiles(response.data);
         } catch (error) {
             console.error('Error fetching data files:', error);
@@ -188,7 +202,7 @@ const Plots = ({ job }) => {
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                     <XAxis 
-                        type="number"
+                       type="number"
                         scale="linear"
                         dataKey="name"
                         ticks={getAdaptiveTicks(chartData)} 
