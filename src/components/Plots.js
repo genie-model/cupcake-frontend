@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import "jspdf-autotable"; // Import jspdf-autotable for table formatting in PDF
 
 const Plots = ({ job }) => {
+    const jobName = job?.name || null;
     const [dataFiles, setDataFiles] = useState([]);
     const [variables, setVariables] = useState([]);
     const [chartData, setChartData] = useState([]);
@@ -15,14 +16,9 @@ const Plots = ({ job }) => {
     const [eventSource, setEventSource] = useState(null);
     const chartRef = useRef(null);
 
+    // Reset when job name changes; clean up SSE in a separate effect below.
     useEffect(() => {
-        // Close any existing SSE stream when switching jobs
-        if (eventSource) {
-            eventSource.close();
-            setEventSource(null);
-        }
-
-        // Reset plot state for new job
+        // Reset plot state only when job name actually changes
         setSelectedDataFile('');
         setSelectedVariable('');
         setVariables([]);
@@ -30,10 +26,31 @@ const Plots = ({ job }) => {
         setDataBuffer([]);
         setDataFiles([]);
 
-        if (job?.name) {
-            fetchDataFiles(job.name);
+        if (jobName) {
+            fetchDataFiles(jobName);
         }
-    }, [job]);
+    }, [jobName]);
+
+    // Close any existing SSE stream when switching jobs (jobName change)
+    useEffect(() => {
+        if (!eventSource) return;
+        return () => {
+            eventSource.close();
+        };
+    }, [eventSource, jobName]);
+
+    // When status changes, refresh data files (without clearing state) if needed
+    useEffect(() => {
+        if (!jobName) return;
+        // If no data files yet and job moved beyond RUNNABLE, try fetching
+        if (!dataFiles.length && job?.status && job.status !== "RUNNABLE") {
+            fetchDataFiles(jobName);
+        }
+        // Optional: always refresh on status changes (uncomment if desired)
+        // else {
+        //     fetchDataFiles(jobName);
+        // }
+    }, [jobName, job?.status]);
 
     const fetchDataFiles = async (jobName) => {
         try {
