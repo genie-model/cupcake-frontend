@@ -100,7 +100,9 @@ const FileStructure = ({ onSelectJob, setRefreshJobs, selectedJobName }) => {
   // Fetch the list of jobs
   const fetchJobs = async () => {
     try {
-      const response = await api.get(`/jobs`);
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+      console.log(":: apiUrl is :: " + apiUrl);
+      const response = await api.get(`${apiUrl}/jobs`);
       const jobList = response.data.jobs
         .map((job) => ({
           heading: job.name,
@@ -117,6 +119,14 @@ const FileStructure = ({ onSelectJob, setRefreshJobs, selectedJobName }) => {
     fetchJobs();
     setRefreshJobs(() => fetchJobs);
   }, [setRefreshJobs]);
+
+  // Automatically open "My Jobs" when the job list updates (e.g., after creation)
+  useEffect(() => {
+    setExpandedNodes((prev) => {
+      if (prev["My Jobs"]) return prev;
+      return { ...prev, "My Jobs": true };
+    });
+  }, [jobs.length]);
 
   const toggleNode = (heading) => {
     setExpandedNodes((prev) => {

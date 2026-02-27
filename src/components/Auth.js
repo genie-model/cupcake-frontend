@@ -7,6 +7,7 @@ const Auth = ({ onAuthSuccess }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,14 +52,24 @@ const Auth = ({ onAuthSuccess }) => {
             placeholder="you@example.com"
           />
           <label className="auth-label">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="auth-input"
-            placeholder="••••••••"
-          />
+          <div className="auth-password-row">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="auth-input"
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              className="auth-eye"
+              onClick={() => setShowPassword((s) => !s)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? "🙈" : "👁️"}
+            </button>
+          </div>
           {error && <div className="auth-error">{error}</div>}
           <button type="submit" className="auth-button">
             {mode === "login" ? "Login" : "Register"}

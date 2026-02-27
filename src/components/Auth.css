@@ -106,3 +106,24 @@
 .auth-link:hover {
   text-decoration: underline;
 }
+
+.auth-password-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.auth-eye {
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.auth-eye:hover {
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
