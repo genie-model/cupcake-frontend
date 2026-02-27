@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import caretRight from "bootstrap-icons/icons/caret-right.svg";
 import caretDown from "bootstrap-icons/icons/caret-down.svg";
 
@@ -100,9 +100,7 @@ const FileStructure = ({ onSelectJob, setRefreshJobs, selectedJobName }) => {
   // Fetch the list of jobs
   const fetchJobs = async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      console.log(":: apiUrl is :: "+ apiUrl);
-      const response = await axios.get(`${apiUrl}/jobs`);
+      const response = await api.get(`/jobs`);
       const jobList = response.data.jobs
         .map((job) => ({
           heading: job.name,

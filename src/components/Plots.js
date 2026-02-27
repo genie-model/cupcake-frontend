@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
+import api from "../api";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -54,8 +55,7 @@ const Plots = ({ job }) => {
 
     const fetchDataFiles = async (jobName) => {
         try {
-            const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-            const response = await axios.get(`${apiUrl}/get_data_files_list/${jobName}`);
+            const response = await api.get(`/get_data_files_list/${jobName}`);
             setDataFiles(response.data);
         } catch (error) {
             console.error('Error fetching data files:', error);
@@ -64,8 +64,7 @@ const Plots = ({ job }) => {
 
     const fetchVariables = async (selectedFile) => {
         try {
-            const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-            const response = await axios.get(`${apiUrl}/get-variables/${job.name}/${selectedFile}`);
+            const response = await api.get(`/get-variables/${job.name}/${selectedFile}`);
             setVariables(response.data);
         } catch (error) {
             console.error('Error fetching variables:', error);
@@ -113,8 +112,7 @@ const Plots = ({ job }) => {
 
     const fetchInitialPlotData = async (dataFile, variable) => {
         try {
-            const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-            const response = await axios.post(`${apiUrl}/get-plot-data`, {
+            const response = await api.post(`/get-plot-data`, {
                 job_name: job.name,
                 data_file_name: dataFile,
                 variable: variable
@@ -127,18 +125,24 @@ const Plots = ({ job }) => {
     };
 
     const startSSEStream = (dataFile, variable) => {
+        const token = localStorage.getItem("ctoaster_token");
         const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
         const sseUrl = `${apiUrl}/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
-        const newEventSource = new EventSource(sseUrl);
-        newEventSource.onmessage = (event) => {
-            const [x, y] = event.data.split(",").map(Number);
-            setDataBuffer((prevBuffer) => [...prevBuffer, { name: x, value: y }]);
-        };
-        newEventSource.onerror = (error) => {
-            console.error("EventSource error:", error);
-            newEventSource.close();
-        };
-        setEventSource(newEventSource);
+
+        const controller = new AbortController();
+        fetchEventSource(sseUrl, {
+            signal: controller.signal,
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            onmessage(ev) {
+                const [x, y] = ev.data.split(",").map(Number);
+                setDataBuffer((prevBuffer) => [...prevBuffer, { name: x, value: y }]);
+            },
+            onerror(err) {
+                console.error("EventSource error:", err);
+                controller.abort();
+            },
+        });
+        setEventSource({ close: () => controller.abort() });
     };
 
     // Merge new points, deduplicate by x (name), and keep chronological order

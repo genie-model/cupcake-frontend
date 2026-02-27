@@ -1,5 +1,5 @@
 import React from "react";
-import axios from "axios";
+import api from "../api";
 
 const Status = ({ job }) => {
   if (!job) {
@@ -27,8 +27,8 @@ const Status = ({ job }) => {
     if (!job?.name) return;
     try {
       const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.get(
-        `${apiUrl}/jobs/${job.name}/download`,
+      const response = await api.get(
+        `/jobs/${job.name}/download`,
         { responseType: "blob" }
       );
       const url = window.URL.createObjectURL(new Blob([response.data]));

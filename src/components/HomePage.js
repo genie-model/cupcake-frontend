@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import FileStructure from "./FileStructure";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
@@ -11,7 +11,7 @@ import Namelists from "./Namelists";
 import Output from "./Output";
 import Plots from "./Plots";
 
-function HomePage() {
+function HomePage({ onLogout }) {
   const [activeDiv, setActiveDiv] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -53,8 +53,7 @@ function HomePage() {
       return;
     }
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.get(`${apiUrl}/job/${jobName}`);
+      const response = await api.get(`/job/${jobName}`);
       setSelectedJob(response.data.job);
     } catch (err) {
       console.error("Error fetching job data:", err);
@@ -63,8 +62,7 @@ function HomePage() {
 
   const handleAddJob = async () => {
       try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.post(`${apiUrl}/add-job`, {
+      const response = await api.post(`/add-job`, {
           job_name: newJobName,
       });
       alert(response.data.message);
@@ -84,8 +82,7 @@ function HomePage() {
 
   const handleDeleteJob = async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.delete(`${apiUrl}/delete-job`);
+      const response = await api.delete(`/delete-job`);
       alert(response.data.message);
       setShowModal(false);
       refreshJobs(); // Refresh the job list after deleting the job
@@ -102,8 +99,7 @@ function HomePage() {
   // Define the function to handle running the job
   const handleRunJob = async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.post(`${apiUrl}/run-job`);
+      const response = await api.post(`/run-job`);
       alert(response.data.message); // Display success message
       setShowModal(false); // Close modal after running the job
       refreshJobs(); // Refresh job status after running
@@ -119,8 +115,7 @@ function HomePage() {
 
   const handlePauseJob = async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.post(`${apiUrl}/pause-job`);
+      const response = await api.post(`/pause-job`);
       alert(response.data.message); // Display success message
       setShowModal(false); // Close modal after pausing the job
       refreshJobs(); // Refresh job status after pausing
@@ -162,8 +157,7 @@ function HomePage() {
 
   const refreshJobDetails = async (jobName) => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.get(`${apiUrl}/job/${jobName}`);
+      const response = await api.get(`/job/${jobName}`);
       setSelectedJob(response.data.job);
     } catch (err) {
       console.error("Error refreshing job data:", err);
@@ -241,8 +235,7 @@ function HomePage() {
     // Function to fetch and update job details
     const fetchJobDetails = async () => {
       try {
-        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-        const response = await axios.get(`${apiUrl}/job/${selectedJob.name}`);
+        const response = await api.get(`/job/${selectedJob.name}`);
         const updatedJob = response.data.job;
 
         // Check if the job status has changed
@@ -269,6 +262,11 @@ function HomePage() {
 
   return (
     <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px" }}>
+        <button className="btn btn-outline-secondary btn-sm" onClick={onLogout}>
+          Logout
+        </button>
+      </div>
       <div>
         <p className="top-text">Job</p>
         <div className="parent" style={{ position: "relative" }}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 
 const Setup = ({ selectedJob, refreshJobDetails }) => {
   const [jobDetails, setJobDetails] = useState(null);
@@ -16,8 +16,7 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
   useEffect(() => {
     const fetchJobDetails = async () => {
       try {
-        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-        const response = await axios.get(`${apiUrl}/setup/${selectedJob.name}`);
+        const response = await api.get(`/setup/${selectedJob.name}`);
         const setup = response.data.setup;
         setJobDetails(setup);
         setInitialSetup(setup); // Save the initial setup
@@ -33,15 +32,14 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
 
     const fetchDropdownValues = async () => {
       try {
-        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
         const [
             baseConfigsResponse,
             userConfigsResponse,
             completedJobsResponse,
         ] = await Promise.all([
-            axios.get(`${apiUrl}/base-configs`),
-            axios.get(`${apiUrl}/user-configs`),
-            axios.get(`${apiUrl}/completed-jobs`), // Fetch completed jobs
+            api.get(`/base-configs`),
+            api.get(`/user-configs`),
+            api.get(`/completed-jobs`), // Fetch completed jobs
         ]);
         setBaseConfigs(baseConfigsResponse.data.base_configs || []);
         setUserConfigs(userConfigsResponse.data.user_configs || []);
@@ -59,9 +57,8 @@ const Setup = ({ selectedJob, refreshJobDetails }) => {
 
   const handleSaveChanges = async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-      const response = await axios.post(
-          `${apiUrl}/setup/${selectedJob.name}`,
+      const response = await api.post(
+          `/setup/${selectedJob.name}`,
           {
               base_config: baseConfig,
               user_config: userConfig,

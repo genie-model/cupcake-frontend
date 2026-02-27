@@ -4,7 +4,8 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from "react";
-import axios from "axios";
+import api from "../api";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 
 const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
   const outputQueue = useRef([]); // Queue to hold incoming lines temporarily
@@ -39,10 +40,7 @@ const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
     // Function to fetch existing log content
     const fetchLogContent = async () => {
       try {
-        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-        const response = await axios.get(
-            `${apiUrl}/get-log/${job.name}`
-        );
+        const response = await api.get(`/get-log/${job.name}`);
         const content = response.data.content;
         if (content) {
           setJobOutputs((prevOutputs) => ({
@@ -78,21 +76,23 @@ const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
 
     fetchLogContent();
 
-    // Establish connection to the job-specific output streaming API
+    // Establish connection to the job-specific output streaming API with auth header
     const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-    eventSourceRef.current = new EventSource(
-      `${apiUrl}/stream-output/${job.name}`
-    );
-    
-    eventSourceRef.current.onmessage = (event) => {
-      const newLine = event.data + "\n";
-      outputQueue.current.push(newLine);
-    };
-
-    eventSourceRef.current.onerror = (event) => {
-      console.error("Error receiving output stream:", event);
-      eventSourceRef.current.close();
-    };
+    const token = localStorage.getItem("ctoaster_token");
+    const controller = new AbortController();
+    fetchEventSource(`${apiUrl}/stream-output/${job.name}`, {
+      signal: controller.signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      onmessage(event) {
+        const newLine = event.data + "\n";
+        outputQueue.current.push(newLine);
+      },
+      onerror(err) {
+        console.error("Error receiving output stream:", err);
+        controller.abort();
+      },
+    });
+    eventSourceRef.current = { close: () => controller.abort() };
 
     // Interval to process and display lines from the queue with a delay
     const intervalId = setInterval(() => {
