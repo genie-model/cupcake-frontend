@@ -102,7 +102,7 @@ const FileStructure = ({ onSelectJob, setRefreshJobs, selectedJobName }) => {
     try {
       const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
       console.log(":: apiUrl is :: " + apiUrl);
-      const response = await api.get(`${apiUrl}/jobs`);
+      const response = await api.get("/jobs");
       const jobList = response.data.jobs
         .map((job) => ({
           heading: job.name,
