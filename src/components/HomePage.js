@@ -82,7 +82,9 @@ function HomePage({ onLogout }) {
 
   const handleDeleteJob = async () => {
     try {
-      const response = await api.delete(`/delete-job`);
+      const response = await api.delete(`/delete-job`, {
+        params: { job_name: selectedJob.name },
+      });
       alert(response.data.message);
       setShowModal(false);
       refreshJobs(); // Refresh the job list after deleting the job
@@ -99,7 +101,7 @@ function HomePage({ onLogout }) {
   // Define the function to handle running the job
   const handleRunJob = async () => {
     try {
-      const response = await api.post(`/run-job`);
+      const response = await api.post(`/run-job`, { job_name: selectedJob.name });
       alert(response.data.message); // Display success message
       setShowModal(false); // Close modal after running the job
       refreshJobs(); // Refresh job status after running
@@ -115,7 +117,7 @@ function HomePage({ onLogout }) {
 
   const handlePauseJob = async () => {
     try {
-      const response = await api.post(`/pause-job`);
+      const response = await api.post(`/pause-job`, { job_name: selectedJob.name });
       alert(response.data.message); // Display success message
       setShowModal(false); // Close modal after pausing the job
       refreshJobs(); // Refresh job status after pausing
