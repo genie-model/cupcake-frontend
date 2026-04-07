@@ -77,7 +77,7 @@ const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
     fetchLogContent();
 
     // Establish connection to the job-specific output streaming API with auth header
-    const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+    const apiUrl = process.env.REACT_APP_API_URL || "/api";
     const token = localStorage.getItem("ctoaster_token");
     const controller = new AbortController();
     fetchEventSource(`${apiUrl}/stream-output/${job.name}`, {

@@ -126,7 +126,7 @@ const Plots = ({ job }) => {
 
     const startSSEStream = (dataFile, variable) => {
         const token = localStorage.getItem("ctoaster_token");
-        const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+        const apiUrl = process.env.REACT_APP_API_URL || "/api";
         const sseUrl = `${apiUrl}/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
 
         const controller = new AbortController();
