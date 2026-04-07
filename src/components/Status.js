@@ -26,7 +26,6 @@ const Status = ({ job }) => {
   const handleDownloadJob = async () => {
     if (!job?.name) return;
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || "/api";
       const response = await api.get(
         `/jobs/${job.name}/download`,
         { responseType: "blob" }
