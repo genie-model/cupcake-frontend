@@ -6,8 +6,14 @@ import Auth from './components/Auth';
 
 function App() {
   const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('ctoaster_user');
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem('ctoaster_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      localStorage.removeItem('ctoaster_user');
+      localStorage.removeItem('ctoaster_token');
+      return null;
+    }
   });
 
   const handleAuthSuccess = useCallback((u) => {
@@ -24,8 +30,12 @@ function App() {
     // keep user in sync with storage changes (e.g., from another tab)
     const onStorage = (e) => {
       if (e.key === 'ctoaster_user') {
-        const stored = e.newValue ? JSON.parse(e.newValue) : null;
-        setUser(stored);
+        try {
+          const stored = e.newValue ? JSON.parse(e.newValue) : null;
+          setUser(stored);
+        } catch {
+          setUser(null);
+        }
       }
       if (e.key === 'ctoaster_token' && !e.newValue) {
         setUser(null);
