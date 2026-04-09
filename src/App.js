@@ -3,6 +3,7 @@ import 'bootstrap/dist/css/bootstrap.css';
 import React, { useState, useEffect, useCallback } from 'react';
 import HomePage from './components/HomePage';
 import Auth from './components/Auth';
+import AdminPage from './components/AdminPage';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -26,8 +27,13 @@ function App() {
     setUser(null);
   }, []);
 
+  const handleExitAdmin = useCallback(() => {
+    const updated = { ...user, isAdmin: false };
+    localStorage.setItem('ctoaster_user', JSON.stringify(updated));
+    setUser(updated);
+  }, [user]);
+
   useEffect(() => {
-    // keep user in sync with storage changes (e.g., from another tab)
     const onStorage = (e) => {
       if (e.key === 'ctoaster_user') {
         try {
@@ -47,6 +53,10 @@ function App() {
 
   if (!user) {
     return <Auth onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  if (user.isAdmin) {
+    return <AdminPage onLogout={handleLogout} onExitAdmin={handleExitAdmin} />;
   }
 
   return <HomePage onLogout={handleLogout} />;

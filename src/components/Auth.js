@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import api from "../api";
 import "./Auth.css";
 
+const ADMIN_EMAILS = ["pthak006@ucr.edu", "andy@seao2.org"];
+
 const Auth = ({ onAuthSuccess }) => {
-  const [mode, setMode] = useState("login"); // "login" or "register"
+  const [mode, setMode] = useState("login"); // "login", "register", or "admin"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -13,12 +15,21 @@ const Auth = ({ onAuthSuccess }) => {
     e.preventDefault();
     setError("");
     try {
-      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
+      const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
       const res = await api.post(endpoint, { email, password });
       const { token, user } = res.data;
+
+      if (mode === "admin" && !ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
+        setError("This account does not have admin privileges");
+        return;
+      }
+
       localStorage.setItem("ctoaster_token", token);
-      localStorage.setItem("ctoaster_user", JSON.stringify(user));
-      onAuthSuccess(user);
+      const userData = mode === "admin"
+        ? { ...user, isAdmin: true }
+        : user;
+      localStorage.setItem("ctoaster_user", JSON.stringify(userData));
+      onAuthSuccess(userData);
     } catch (err) {
       console.error(err);
       const detail =
@@ -34,13 +45,14 @@ const Auth = ({ onAuthSuccess }) => {
     setError("");
   };
 
+  const subtitle = mode === "admin" ? "Admin Login" : mode === "login" ? "Sign in" : "Create account";
+  const buttonLabel = mode === "admin" ? "Admin Login" : mode === "login" ? "Login" : "Register";
+
   return (
     <div className="auth-container">
       <div className="auth-card">
         <h1 className="auth-title">ctoaster</h1>
-        <h2 className="auth-subtitle">
-          {mode === "login" ? "Sign in" : "Create account"}
-        </h2>
+        <h2 className="auth-subtitle">{subtitle}</h2>
         <form onSubmit={handleSubmit} className="auth-form">
           <label className="auth-label">Email</label>
           <input
@@ -71,25 +83,38 @@ const Auth = ({ onAuthSuccess }) => {
             </button>
           </div>
           {error && <div className="auth-error">{error}</div>}
-          <button type="submit" className="auth-button">
-            {mode === "login" ? "Login" : "Register"}
-          </button>
+          <button type="submit" className="auth-button">{buttonLabel}</button>
         </form>
-        <div className="auth-toggle">
-          {mode === "login" ? (
-            <>
-              New here?{" "}
-              <button type="button" className="auth-link" onClick={toggleMode}>
-                Register
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <button type="button" className="auth-link" onClick={toggleMode}>
-                Login
-              </button>
-            </>
+        {mode === "admin" ? (
+          <div className="auth-toggle">
+            <button type="button" className="auth-link" onClick={() => { setMode("login"); setError(""); }}>
+              Back to Login
+            </button>
+          </div>
+        ) : (
+          <div className="auth-toggle">
+            {mode === "login" ? (
+              <>
+                New here?{" "}
+                <button type="button" className="auth-link" onClick={toggleMode}>
+                  Register
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button type="button" className="auth-link" onClick={toggleMode}>
+                  Login
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        <div className="auth-admin-link">
+          {mode !== "admin" && (
+            <button type="button" className="auth-link auth-link-dim" onClick={() => { setMode("admin"); setError(""); }}>
+              System Admin
+            </button>
           )}
         </div>
       </div>
