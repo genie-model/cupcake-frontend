@@ -94,7 +94,8 @@ function HomePage({ onLogout }) {
       }
     } catch (err) {
       console.error("Error deleting job:", err);
-      alert("Error deleting job");
+      const detail = err?.response?.data?.detail || "Unknown error";
+      alert(`Error deleting job: ${detail}`);
     }
   };
 
