@@ -5,9 +5,11 @@ import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Responsi
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import "jspdf-autotable"; // Import jspdf-autotable for table formatting in PDF
+import Plot from "react-plotly.js";
 
 const Plots = ({ job }) => {
     const jobName = job?.name || null;
+    const [activeTab, setActiveTab] = useState("timeseries"); // "timeseries" | "heatmap"
     const [dataFiles, setDataFiles] = useState([]);
     const [variables, setVariables] = useState([]);
     const [chartData, setChartData] = useState([]);
@@ -276,65 +278,171 @@ const Plots = ({ job }) => {
         </div>
     );
 
+    const tabStyle = (tab) => ({
+        padding: '8px 20px',
+        cursor: 'pointer',
+        border: 'none',
+        borderBottom: activeTab === tab ? '3px solid #4A90E2' : '3px solid transparent',
+        backgroundColor: 'transparent',
+        fontWeight: activeTab === tab ? 'bold' : 'normal',
+        fontSize: '14px',
+        color: activeTab === tab ? '#4A90E2' : '#555',
+    });
+
     return (
         <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-            <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <label>
-                    Data File:
-                    <select value={selectedDataFile} onChange={handleDataFileChange}>
-                        <option value="">Select a data file</option>
-                        {dataFiles.map((file, index) => (
-                            <option key={index} value={file}>
-                                {file}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <label>
-                    Variable:
-                    <select value={selectedVariable} onChange={handleVariableChange} disabled={!selectedDataFile}>
-                        <option value="">Select a variable</option>
-                        {variables.map((variable, index) => (
-                            <option key={index} value={variable}>
-                                {variable}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <button 
-                    onClick={exportChartAsPDF} 
-                    style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#4A90E2',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        transition: 'background-color 0.3s'
-                    }}
-                >
-                    Export Plot
+            {/* Tab bar */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #ddd', marginBottom: '20px' }}>
+                <button style={tabStyle("timeseries")} onClick={() => setActiveTab("timeseries")}>
+                    Time Series
                 </button>
-                <button 
-                    onClick={exportPlotDataAsCSV} 
-                    style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#4CAF50',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        transition: 'background-color 0.3s'
-                    }}
-                >
-                    Export Data
+                <button style={tabStyle("heatmap")} onClick={() => setActiveTab("heatmap")}>
+                    Surface Temperature
                 </button>
             </div>
-            {renderLineChart()}
+
+            {activeTab === "timeseries" && (
+                <>
+                    <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <label>
+                            Data File:
+                            <select value={selectedDataFile} onChange={handleDataFileChange}>
+                                <option value="">Select a data file</option>
+                                {dataFiles.map((file, index) => (
+                                    <option key={index} value={file}>
+                                        {file}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            Variable:
+                            <select value={selectedVariable} onChange={handleVariableChange} disabled={!selectedDataFile}>
+                                <option value="">Select a variable</option>
+                                {variables.map((variable, index) => (
+                                    <option key={index} value={variable}>
+                                        {variable}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <button
+                            onClick={exportChartAsPDF}
+                            style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#4A90E2',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                transition: 'background-color 0.3s'
+                            }}
+                        >
+                            Export Plot
+                        </button>
+                        <button
+                            onClick={exportPlotDataAsCSV}
+                            style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#4CAF50',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                transition: 'background-color 0.3s'
+                            }}
+                        >
+                            Export Data
+                        </button>
+                    </div>
+                    {renderLineChart()}
+                </>
+            )}
+
+            {activeTab === "heatmap" && <TempHeatmap job={job} />}
+        </div>
+    );
+};
+
+// ---------------------------------------------------------------------------
+// TempHeatmap — polls /get-temp-snapshot every 200 ms and renders a Plotly
+// heatmap of ocean surface temperature (lon × lat).
+// ---------------------------------------------------------------------------
+const TempHeatmap = ({ job }) => {
+    const [snapshotData, setSnapshotData] = useState(null);
+    const [pollInterval, setPollInterval] = useState(200);
+    const intervalRef = useRef(null);
+
+    useEffect(() => {
+        if (!job?.name) return;
+
+        const fetchSnapshot = async () => {
+            try {
+                const response = await api.get(`/get-temp-snapshot/${job.name}`);
+                setSnapshotData(response.data);
+            } catch {
+                // snapshot not yet written — keep polling silently
+            }
+        };
+
+        fetchSnapshot();
+        intervalRef.current = setInterval(fetchSnapshot, pollInterval);
+
+        return () => clearInterval(intervalRef.current);
+    }, [job?.name, pollInterval]);
+
+    const handleDoubleInterval = () => {
+        setPollInterval((prev) => Math.min(prev * 2, 3200));
+    };
+
+    if (!snapshotData) {
+        return (
+            <div style={{ padding: "20px", color: "#888" }}>
+                Waiting for temperature snapshot… (model writes every 5 years)
+                <br />
+                <small>Polling every {pollInterval} ms</small>
+            </div>
+        );
+    }
+
+    const plotData = [
+        {
+            type: "heatmap",
+            x: snapshotData.lon,
+            y: snapshotData.lat,
+            // netCDF4-python reads Fortran (lon,lat) as (lat,lon) — correct for Plotly
+            z: snapshotData.temp,
+            colorscale: "RdBu",
+            reversescale: true,
+            colorbar: { title: "Temp (°C)" },
+        },
+    ];
+
+    const layout = {
+        title: "Ocean Surface Temperature",
+        xaxis: { title: "Longitude (°E)" },
+        yaxis: { title: "Latitude (°N)" },
+        margin: { t: 50, r: 20, b: 60, l: 60 },
+    };
+
+    return (
+        <div>
+            <Plot
+                data={plotData}
+                layout={layout}
+                style={{ width: "100%", height: "500px" }}
+                config={{ responsive: true }}
+            />
+            <div style={{ marginTop: "8px", fontSize: "12px", color: "#888" }}>
+                Polling every {pollInterval} ms.{" "}
+                <button onClick={handleDoubleInterval} style={{ fontSize: "12px" }}>
+                    Slow down (×2)
+                </button>
+            </div>
         </div>
     );
 };
