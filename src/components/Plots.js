@@ -372,10 +372,19 @@ const Plots = ({ job }) => {
 // TempHeatmap — polls /get-temp-snapshot every 200 ms and renders a Plotly
 // heatmap of ocean surface temperature (lon × lat).
 // ---------------------------------------------------------------------------
+// fixed display ranges (°C). Pinned so the eye sees real spatial change
+// instead of Plotly auto-rescaling the colorbar on every frame.
+const ABS_ZMIN = -2;
+const ABS_ZMAX = 32;
+const ANOM_RANGE = 2;   // anomaly view: symmetric ±2 °C about zero
+
 const TempHeatmap = ({ job }) => {
     const [snapshotData, setSnapshotData] = useState(null);
     const [pollInterval, setPollInterval] = useState(200);
+    const [viewMode, setViewMode] = useState("absolute"); // "absolute" | "anomaly"
     const intervalRef = useRef(null);
+    const lastTokenRef = useRef(null);
+    const baselineRef = useRef(null);   // first frame's temp grid, for anomaly
 
     useEffect(() => {
         if (!job?.name) return;
@@ -383,7 +392,15 @@ const TempHeatmap = ({ job }) => {
         const fetchSnapshot = async () => {
             try {
                 const response = await api.get(`/get-temp-snapshot/${job.name}`);
-                setSnapshotData(response.data);
+                // re-render only when the model writes a new frame (quarter-index token)
+                if (response.data.token !== lastTokenRef.current) {
+                    lastTokenRef.current = response.data.token;
+                    // capture the first frame as the anomaly baseline
+                    if (baselineRef.current === null) {
+                        baselineRef.current = response.data.temp;
+                    }
+                    setSnapshotData(response.data);
+                }
             } catch {
                 // snapshot not yet written — keep polling silently
             }
@@ -399,15 +416,33 @@ const TempHeatmap = ({ job }) => {
         setPollInterval((prev) => Math.min(prev * 2, 3200));
     };
 
+    // re-baseline anomalies against the currently displayed frame
+    const handleSetBaseline = () => {
+        if (snapshotData) baselineRef.current = snapshotData.temp;
+    };
+
     if (!snapshotData) {
         return (
             <div style={{ padding: "20px", color: "#888" }}>
-                Waiting for temperature snapshot… (model writes every 5 years)
+                Waiting for temperature snapshot… (model writes 4×/year, each season)
                 <br />
                 <small>Polling every {pollInterval} ms</small>
             </div>
         );
     }
+
+    const isAnomaly = viewMode === "anomaly";
+    const baseline = baselineRef.current;
+
+    // element-wise temp − baseline, preserving land mask (nulls)
+    const z = isAnomaly && baseline
+        ? snapshotData.temp.map((row, i) =>
+              row.map((v, j) => {
+                  const b = baseline?.[i]?.[j];
+                  return v == null || b == null ? null : v - b;
+              })
+          )
+        : snapshotData.temp;
 
     const plotData = [
         {
@@ -415,22 +450,44 @@ const TempHeatmap = ({ job }) => {
             x: snapshotData.lon,
             y: snapshotData.lat,
             // netCDF4-python reads Fortran (lon,lat) as (lat,lon) — correct for Plotly
-            z: snapshotData.temp,
+            z,
+            // RdBu (no reverse): warm = red, cold = blue (conventional)
             colorscale: "RdBu",
-            reversescale: true,
-            colorbar: { title: "Temp (°C)" },
+            reversescale: false,
+            zmin: isAnomaly ? -ANOM_RANGE : ABS_ZMIN,
+            zmax: isAnomaly ? ANOM_RANGE : ABS_ZMAX,
+            zmid: isAnomaly ? 0 : undefined,
+            colorbar: { title: isAnomaly ? "Δ°C vs first" : "Temp (°C)" },
         },
     ];
 
     const layout = {
-        title: "Ocean Surface Temperature",
-        xaxis: { title: "Longitude (°E)" },
-        yaxis: { title: "Latitude (°N)" },
+        title: isAnomaly
+            ? "Surface Temperature Anomaly (vs first frame)"
+            : "Ocean Surface Temperature",
+        // full geographic extent: lon −180..180, lat −90..90
+        xaxis: { title: "Longitude (°E)", range: [-180, 180], dtick: 60, zeroline: false },
+        yaxis: { title: "Latitude (°N)", range: [-90, 90], dtick: 30, zeroline: false },
         margin: { t: 50, r: 20, b: 60, l: 60 },
     };
 
     return (
         <div>
+            <div style={{ marginBottom: "8px", fontSize: "13px" }}>
+                <label style={{ marginRight: "12px" }}>
+                    <input
+                        type="checkbox"
+                        checked={isAnomaly}
+                        onChange={(e) => setViewMode(e.target.checked ? "anomaly" : "absolute")}
+                    />{" "}
+                    Anomaly view (vs first frame)
+                </label>
+                {isAnomaly && (
+                    <button onClick={handleSetBaseline} style={{ fontSize: "12px" }}>
+                        Reset baseline to current
+                    </button>
+                )}
+            </div>
             <Plot
                 data={plotData}
                 layout={layout}
