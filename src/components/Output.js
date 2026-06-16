@@ -5,113 +5,75 @@ import React, {
   forwardRef,
 } from "react";
 import api from "../api";
-import { fetchEventSource } from "@microsoft/fetch-event-source";
+
+// Job states during which the model may still be producing log output.
+const ACTIVE_STATES = ["QUEUED", "RUNNING", "PAUSE_REQUESTED", "PAUSED"];
 
 const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
-  const outputQueue = useRef([]); // Queue to hold incoming lines temporarily
-  const eventSourceRef = useRef(null); // To keep track of the EventSource instance
+  const intervalRef = useRef(null);
 
-  // Make the clearOutput method available to the parent component
+  // Parent calls this when a job is deleted.
   useImperativeHandle(ref, () => ({
     clearOutput() {
-      if (!job) return; // Ensure job is not null
-      setJobOutputs((prevOutputs) => ({
-        ...prevOutputs,
-        [job.name]: "",
-      }));
-      outputQueue.current = []; // Clear the output queue as well
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close(); // Close any active event source connection
-        eventSourceRef.current = null;
+      if (!job) return;
+      setJobOutputs((prev) => ({ ...prev, [job.name]: "" }));
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     },
   }));
 
   useEffect(() => {
     if (!job) return;
+    let cancelled = false;
 
-    // Clear outputQueue and any existing EventSource before starting new stream
-    outputQueue.current = [];
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    // Pull the full run.log from the API. The runner syncs it to the Filestore
+    // every ~2s, so polling get-log mirrors live progress without depending on
+    // a tail-from-end SSE (which skipped everything written before it connected
+    // and broke when the log file was replaced on each sync).
+    const fetchLog = async () => {
+      try {
+        const res = await api.get(`/get-log/${job.name}`);
+        if (cancelled) return;
+        setJobOutputs((prev) => ({ ...prev, [job.name]: res.data.content || "" }));
+      } catch (err) {
+        // Keep whatever we already have; transient errors are expected while a
+        // pod is spinning up.
+        console.error("Error fetching log content:", err);
+      }
+    };
+
+    // Fetch immediately, then poll only while the job is still active.
+    fetchLog();
+    if (ACTIVE_STATES.includes(job.status)) {
+      intervalRef.current = setInterval(fetchLog, 2000);
     }
 
-    // Function to fetch existing log content
-    const fetchLogContent = async () => {
-      try {
-        const response = await api.get(`/get-log/${job.name}`);
-        const content = response.data.content;
-        if (content) {
-          setJobOutputs((prevOutputs) => ({
-            ...prevOutputs,
-            [job.name]: content,
-          }));
-        } else {
-          setJobOutputs((prevOutputs) => {
-            if (prevOutputs[job.name]) {
-              return prevOutputs;
-            } else {
-              return {
-                ...prevOutputs,
-                [job.name]: "No output yet.",
-              };
-            }
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching log content:", error);
-        setJobOutputs((prevOutputs) => {
-          if (prevOutputs[job.name]) {
-            return prevOutputs;
-          } else {
-            return {
-              ...prevOutputs,
-              [job.name]: "Error fetching log content.",
-            };
-          }
-        });
-      }
-    };
-
-    fetchLogContent();
-
-    // Establish connection to the job-specific output streaming API with auth header
-    const apiUrl = process.env.REACT_APP_API_URL || "/api";
-    const token = localStorage.getItem("ctoaster_token");
-    const controller = new AbortController();
-    fetchEventSource(`${apiUrl}/stream-output/${job.name}`, {
-      signal: controller.signal,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      onmessage(event) {
-        const newLine = event.data + "\n";
-        outputQueue.current.push(newLine);
-      },
-      onerror(err) {
-        console.error("Error receiving output stream:", err);
-        controller.abort();
-      },
-    });
-    eventSourceRef.current = { close: () => controller.abort() };
-
-    // Interval to process and display lines from the queue with a delay
-    const intervalId = setInterval(() => {
-      if (outputQueue.current.length > 0) {
-        const nextLine = outputQueue.current.shift();
-        setJobOutputs((prevOutputs) => ({
-          ...prevOutputs,
-          [job.name]: (prevOutputs[job.name] || "") + nextLine,
-        }));
-      }
-    }, 50); // Adjust the delay (50ms) between each line as needed
-
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      cancelled = true;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
-      clearInterval(intervalId);
     };
-  }, [job]); // Dependency on the job
+    // Re-runs when the job changes OR its status transitions (e.g. RUNNING →
+    // COMPLETE), which restarts/stops polling appropriately.
+  }, [job?.name, job?.status, setJobOutputs]);
+
+  const content = job ? jobOutputs[job.name] : "";
+  const isActive = job && ACTIVE_STATES.includes(job.status);
+
+  let body;
+  if (content) {
+    body = content;
+  } else if (isActive) {
+    body =
+      "⏳  Job is starting — the compute instance is spinning up.\n" +
+      "Logs will appear here automatically once the model begins running.";
+  } else {
+    body = "No output yet.";
+  }
 
   return (
     <div
@@ -124,9 +86,7 @@ const Output = forwardRef(({ job, jobOutputs, setJobOutputs }, ref) => {
       }}
     >
       <h3>Job Output</h3>
-      <pre style={{ whiteSpace: "pre-wrap", wordWrap: "break-word" }}>
-        {job ? jobOutputs[job.name] || "No output yet." : ""}
-      </pre>
+      <pre style={{ whiteSpace: "pre-wrap", wordWrap: "break-word" }}>{body}</pre>
     </div>
   );
 });
