@@ -61,10 +61,6 @@ const Status = ({ job }) => {
           <label>Run Length:</label>
           <input type="text" value={job.run_length} readOnly />
         </div>
-        <div>
-          <label>T100:</label>
-          <input type="text" value={job.t100} readOnly />
-        </div>
         <div style={{ marginTop: "16px" }}>
           <button
             onClick={handleDownloadJob}

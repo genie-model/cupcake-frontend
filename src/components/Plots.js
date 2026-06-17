@@ -56,7 +56,11 @@ const Plots = ({ job }) => {
     const fetchDataFiles = async (jobName) => {
         try {
             const response = await api.get(`/get_data_files_list/${jobName}`);
-            setDataFiles(response.data);
+            // sort alphabetically so the list box is ordered (groups by prefix:
+            // biogem_series_atm_*, _carb_*, _ocn_*, ...) instead of raw dir order
+            const files = Array.isArray(response.data) ? [...response.data] : response.data;
+            if (Array.isArray(files)) files.sort((a, b) => String(a).localeCompare(String(b)));
+            setDataFiles(files);
         } catch (error) {
             console.error('Error fetching data files:', error);
         }
@@ -65,7 +69,10 @@ const Plots = ({ job }) => {
     const fetchVariables = async (selectedFile) => {
         try {
             const response = await api.get(`/get-variables/${job.name}/${selectedFile}`);
-            setVariables(response.data);
+            // sort variables alphabetically for a predictable list-box order
+            const vars = Array.isArray(response.data) ? [...response.data] : response.data;
+            if (Array.isArray(vars)) vars.sort((a, b) => String(a).localeCompare(String(b)));
+            setVariables(vars);
         } catch (error) {
             console.error('Error fetching variables:', error);
         }
