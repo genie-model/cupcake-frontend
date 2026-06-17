@@ -1,97 +1,171 @@
 import React, { useState, useEffect, useRef } from "react";
 import api from "../api";
-import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import "jspdf-autotable"; // Import jspdf-autotable for table formatting in PDF
 
+// Job states during which the model may still be writing time-series output.
+const ACTIVE_STATES = ["QUEUED", "RUNNING", "PAUSE_REQUESTED", "PAUSED"];
+const POLL_MS = 2500;
+
 const Plots = ({ job }) => {
     const jobName = job?.name || null;
+    const status = job?.status || null;
     const [dataFiles, setDataFiles] = useState([]);
     const [variables, setVariables] = useState([]);
     const [chartData, setChartData] = useState([]);
-    const [dataBuffer, setDataBuffer] = useState([]);
     const [selectedDataFile, setSelectedDataFile] = useState('');
     const [selectedVariable, setSelectedVariable] = useState('');
-    const [eventSource, setEventSource] = useState(null);
     const chartRef = useRef(null);
 
-    // Reset when job name changes; clean up SSE in a separate effect below.
+    // ---------------------------------------------------------------------
+    // Reset all plot state when the selected job changes.
+    // ---------------------------------------------------------------------
     useEffect(() => {
-        // Reset plot state only when job name actually changes
         setSelectedDataFile('');
         setSelectedVariable('');
         setVariables([]);
         setChartData([]);
-        setDataBuffer([]);
         setDataFiles([]);
-
-        if (jobName) {
-            fetchDataFiles(jobName);
-        }
     }, [jobName]);
 
-    // Close any existing SSE stream when switching jobs (jobName change)
-    useEffect(() => {
-        if (!eventSource) return;
-        return () => {
-            eventSource.close();
-        };
-    }, [eventSource, jobName]);
-
-    // When status changes, refresh data files (without clearing state) if needed
+    // ---------------------------------------------------------------------
+    // Poll the data-files list. The model writes biogem_series_*.res only
+    // after spin-up, and new series files can appear at different times, so we
+    // re-list every POLL_MS while the job is active (previously this fired only
+    // once on a status transition and never retried once RUNNING). One final
+    // fetch runs when the job is terminal. Selection is never clobbered — we
+    // only refresh the list of available files.
+    // ---------------------------------------------------------------------
     useEffect(() => {
         if (!jobName) return;
-        // If no data files yet and job moved beyond RUNNABLE, try fetching
-        if (!dataFiles.length && job?.status && job.status !== "RUNNABLE") {
-            fetchDataFiles(jobName);
-        }
-        // Optional: always refresh on status changes (uncomment if desired)
-        // else {
-        //     fetchDataFiles(jobName);
-        // }
-    }, [jobName, job?.status]);
+        let cancelled = false;
 
-    const fetchDataFiles = async (jobName) => {
-        try {
-            const response = await api.get(`/get_data_files_list/${jobName}`);
-            // sort alphabetically so the list box is ordered (groups by prefix:
-            // biogem_series_atm_*, _carb_*, _ocn_*, ...) instead of raw dir order
-            const files = Array.isArray(response.data) ? [...response.data] : response.data;
-            if (Array.isArray(files)) files.sort((a, b) => String(a).localeCompare(String(b)));
-            setDataFiles(files);
-        } catch (error) {
-            console.error('Error fetching data files:', error);
-        }
-    };
+        const fetchDataFiles = async () => {
+            try {
+                const response = await api.get(`/get_data_files_list/${jobName}`);
+                if (cancelled) return;
+                // sort alphabetically so the list box is grouped by prefix
+                // (biogem_series_atm_*, _carb_*, _ocn_*, ...) not raw dir order
+                const files = Array.isArray(response.data) ? [...response.data] : [];
+                files.sort((a, b) => String(a).localeCompare(String(b)));
+                setDataFiles(files);
+            } catch (error) {
+                // 404 simply means the model hasn't written any series files
+                // yet — expected during spin-up. Keep an empty list quietly.
+                if (error?.response?.status !== 404) {
+                    console.error('Error fetching data files:', error);
+                }
+            }
+        };
 
-    const fetchVariables = async (selectedFile) => {
-        try {
-            const response = await api.get(`/get-variables/${job.name}/${selectedFile}`);
-            // sort variables alphabetically for a predictable list-box order
-            const vars = Array.isArray(response.data) ? [...response.data] : response.data;
-            if (Array.isArray(vars)) vars.sort((a, b) => String(a).localeCompare(String(b)));
-            setVariables(vars);
-        } catch (error) {
-            console.error('Error fetching variables:', error);
+        fetchDataFiles();
+        let intervalId;
+        if (ACTIVE_STATES.includes(status)) {
+            intervalId = setInterval(fetchDataFiles, POLL_MS);
         }
-    };
+        return () => {
+            cancelled = true;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [jobName, status]);
+
+    // ---------------------------------------------------------------------
+    // Fetch the variable list once a data file is selected. The .res header
+    // (which defines the columns) is written when the file is created and does
+    // not grow, so no polling is needed — but retry a couple of times in case
+    // the very first read lands before the header is flushed.
+    // ---------------------------------------------------------------------
+    useEffect(() => {
+        if (!jobName || !selectedDataFile) {
+            setVariables([]);
+            return;
+        }
+        let cancelled = false;
+        let attempts = 0;
+        let timeoutId;
+
+        const fetchVariables = async () => {
+            try {
+                const response = await api.get(`/get-variables/${jobName}/${selectedDataFile}`);
+                if (cancelled) return;
+                const vars = Array.isArray(response.data) ? [...response.data] : [];
+                vars.sort((a, b) => String(a).localeCompare(String(b)));
+                setVariables(vars);
+                if (!vars.length && attempts < 3) {
+                    attempts += 1;
+                    timeoutId = setTimeout(fetchVariables, 1500);
+                }
+            } catch (error) {
+                if (attempts < 3) {
+                    attempts += 1;
+                    timeoutId = setTimeout(fetchVariables, 1500);
+                } else {
+                    console.error('Error fetching variables:', error);
+                }
+            }
+        };
+
+        fetchVariables();
+        return () => {
+            cancelled = true;
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+    }, [jobName, selectedDataFile]);
+
+    // ---------------------------------------------------------------------
+    // Poll the plot data for the selected file+variable. Each call re-reads the
+    // whole series fresh via POST /get-plot-data and replaces chartData. This
+    // replaces the old tail-SSE (which seek()'d to end and broke when the
+    // runner rewrote the .res file every 2s — the same bug fixed in Output.js).
+    // Polling the full file is robust under file rewrite and NFS close-to-open.
+    // ---------------------------------------------------------------------
+    useEffect(() => {
+        if (!jobName || !selectedDataFile || !selectedVariable) return;
+        let cancelled = false;
+
+        const fetchPlotData = async () => {
+            try {
+                const response = await api.post(`/get-plot-data`, {
+                    job_name: jobName,
+                    data_file_name: selectedDataFile,
+                    variable: selectedVariable,
+                });
+                if (cancelled) return;
+                const points = (response.data?.data || [])
+                    .map(([x, y]) => ({ name: x, value: y }))
+                    .sort((a, b) => a.name - b.name);
+                setChartData(points);
+            } catch (error) {
+                // Keep whatever we already plotted; transient while syncing.
+                if (error?.response?.status !== 404) {
+                    console.error('Error fetching plot data:', error);
+                }
+            }
+        };
+
+        fetchPlotData();
+        let intervalId;
+        if (ACTIVE_STATES.includes(status)) {
+            intervalId = setInterval(fetchPlotData, POLL_MS);
+        }
+        return () => {
+            cancelled = true;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [jobName, selectedDataFile, selectedVariable, status]);
 
     const handleDataFileChange = (event) => {
         const selectedFile = event.target.value;
         setSelectedDataFile(selectedFile);
-        fetchVariables(selectedFile);
+        setSelectedVariable('');
+        setChartData([]);
     };
 
     const handleVariableChange = (event) => {
-        const selectedVar = event.target.value;
-        setSelectedVariable(selectedVar);
-        if (eventSource) {
-            eventSource.close();
-        }
-        fetchInitialPlotData(selectedDataFile, selectedVar);
-        startSSEStream(selectedDataFile, selectedVar);
+        setSelectedVariable(event.target.value);
+        setChartData([]);
     };
 
     const getAdaptiveTicks = (data) => {
@@ -116,66 +190,6 @@ const Plots = ({ job }) => {
         }
         return ticks;
     };
-
-    const fetchInitialPlotData = async (dataFile, variable) => {
-        try {
-            const response = await api.post(`/get-plot-data`, {
-                job_name: job.name,
-                data_file_name: dataFile,
-                variable: variable
-            });
-            const initialPlotData = response.data.data.map(([x, y]) => ({ name: x, value: y }));
-            setChartData(initialPlotData);
-        } catch (error) {
-            console.error('Error fetching initial plot data:', error);
-        }
-    };
-
-    const startSSEStream = (dataFile, variable) => {
-        const token = localStorage.getItem("ctoaster_token");
-        const apiUrl = process.env.REACT_APP_API_URL || "/api";
-        const sseUrl = `${apiUrl}/get-plot-data-stream?job_name=${job.name}&data_file_name=${dataFile}&variable=${encodeURIComponent(variable)}`;
-
-        const controller = new AbortController();
-        fetchEventSource(sseUrl, {
-            signal: controller.signal,
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-            onmessage(ev) {
-                const [x, y] = ev.data.split(",").map(Number);
-                setDataBuffer((prevBuffer) => [...prevBuffer, { name: x, value: y }]);
-            },
-            onerror(err) {
-                console.error("EventSource error:", err);
-                controller.abort();
-            },
-        });
-        setEventSource({ close: () => controller.abort() });
-    };
-
-    // Merge new points, deduplicate by x (name), and keep chronological order
-    const mergeAndSortByX = (prevData, buffer) => {
-        if (!buffer.length) return prevData;
-        const merged = [...prevData, ...buffer];
-        const uniqueByX = new Map();
-        merged.forEach((point) => uniqueByX.set(point.name, point));
-        return Array.from(uniqueByX.values()).sort((a, b) => a.name - b.name);
-    };
-
-    useEffect(() => {
-        return () => {
-            if (eventSource) {
-                eventSource.close();
-            }
-        };
-    }, [eventSource]);
-
-    // Merge dataBuffer into chartData for real-time updates
-    useEffect(() => {
-        if (dataBuffer.length > 0) {
-            setChartData((prevData) => mergeAndSortByX(prevData, dataBuffer));
-            setDataBuffer([]); // Clear buffer after merging
-        }
-    }, [dataBuffer]);
 
     const exportChartAsPDF = async () => {
         const chartElement = chartRef.current;
@@ -229,59 +243,62 @@ const Plots = ({ job }) => {
                     margin={{ top: 60, right: 30, left: 80, bottom: 20 }}
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                    <XAxis 
+                    <XAxis
                        type="number"
                         scale="linear"
                         dataKey="name"
-                        ticks={getAdaptiveTicks(chartData)} 
+                        ticks={getAdaptiveTicks(chartData)}
                         domain={['dataMin', 'dataMax']}
                         interval={0} // Render all provided ticks
-                        label={{ 
-                            value: 'Time (Years)', 
-                            position: 'insideBottom', 
+                        label={{
+                            value: 'Time (Years)',
+                            position: 'insideBottom',
                             dy: 20,
-                            style: { fontSize: '14px', fill: '#333' } 
+                            style: { fontSize: '14px', fill: '#333' }
                         }}
                         tick={{ fontSize: '12px', fill: '#666' }}
                     />
-                    <YAxis 
-                        label={{ 
-                            value: `${selectedVariable} (Unit)`, 
-                            angle: -90, 
-                            position: 'insideLeft', 
+                    <YAxis
+                        label={{
+                            value: `${selectedVariable} (Unit)`,
+                            angle: -90,
+                            position: 'insideLeft',
                             dx: -60,
                             dy: 150,
                             style: { fontSize: '14px', fill: '#333' },
                             textAnchor: 'start'
-                        }} 
-                        tick={{ fontSize: '12px', fill: '#666' }} 
+                        }}
+                        tick={{ fontSize: '12px', fill: '#666' }}
                         tickFormatter={(value) => value.toExponential(2)}
                     />
-                    <Tooltip 
-                        formatter={(value) => value.toFixed(2)} 
+                    <Tooltip
+                        formatter={(value) => value.toFixed(2)}
                         labelFormatter={(label) => {
                             const numericLabel = Number(label); // Convert label to a number
                             return !isNaN(numericLabel) ? `Year: ${Math.round(numericLabel)}` : `Year: ${label}`; // Round if numeric
-                        }} 
+                        }}
                     />
-                    <Legend 
-                        verticalAlign="top" 
-                        align="center" 
-                        wrapperStyle={{ fontSize: '14px', marginBottom: '10px' }} 
+                    <Legend
+                        verticalAlign="top"
+                        align="center"
+                        wrapperStyle={{ fontSize: '14px', marginBottom: '10px' }}
                     />
-                    <Line 
-                        type="monotone" 
-                        dataKey="value" 
-                        name={`Variable: ${selectedVariable}`} 
-                        stroke="#4A90E2" 
-                        strokeWidth={2} 
-                        dot={false} 
-                        activeDot={{ r: 6, stroke: '#4A90E2', strokeWidth: 2 }} 
+                    <Line
+                        type="monotone"
+                        dataKey="value"
+                        name={`Variable: ${selectedVariable}`}
+                        stroke="#4A90E2"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 6, stroke: '#4A90E2', strokeWidth: 2 }}
                     />
                 </LineChart>
             </ResponsiveContainer>
         </div>
     );
+
+    const isActive = ACTIVE_STATES.includes(status);
+    const waitingForOutput = isActive && !dataFiles.length;
 
     return (
         <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
@@ -308,8 +325,8 @@ const Plots = ({ job }) => {
                         ))}
                     </select>
                 </label>
-                <button 
-                    onClick={exportChartAsPDF} 
+                <button
+                    onClick={exportChartAsPDF}
                     style={{
                         padding: '8px 16px',
                         backgroundColor: '#4A90E2',
@@ -324,8 +341,8 @@ const Plots = ({ job }) => {
                 >
                     Export Plot
                 </button>
-                <button 
-                    onClick={exportPlotDataAsCSV} 
+                <button
+                    onClick={exportPlotDataAsCSV}
                     style={{
                         padding: '8px 16px',
                         backgroundColor: '#4CAF50',
@@ -341,6 +358,12 @@ const Plots = ({ job }) => {
                     Export Data
                 </button>
             </div>
+            {waitingForOutput && (
+                <div style={{ color: '#777', fontSize: '14px', marginBottom: '12px' }}>
+                    ⏳ Waiting for the model to write its first time-series output —
+                    the plot variables will appear here automatically once they are available.
+                </div>
+            )}
             {renderLineChart()}
         </div>
     );
