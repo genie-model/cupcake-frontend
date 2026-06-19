@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import api from "../api";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import Plot from "react-plotly.js";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import "jspdf-autotable"; // Import jspdf-autotable for table formatting in PDF
@@ -17,7 +18,19 @@ const Plots = ({ job }) => {
     const [chartData, setChartData] = useState([]);
     const [selectedDataFile, setSelectedDataFile] = useState('');
     const [selectedVariable, setSelectedVariable] = useState('');
+    const [activeTab, setActiveTab] = useState("timeseries"); // "timeseries" | "heatmap"
     const chartRef = useRef(null);
+
+    const tabStyle = (tab) => ({
+        padding: '8px 20px',
+        cursor: 'pointer',
+        border: 'none',
+        borderBottom: activeTab === tab ? '3px solid #4A90E2' : '3px solid transparent',
+        backgroundColor: 'transparent',
+        fontWeight: activeTab === tab ? 'bold' : 'normal',
+        fontSize: '14px',
+        color: activeTab === tab ? '#4A90E2' : '#555',
+    });
 
     // ---------------------------------------------------------------------
     // Reset all plot state when the selected job changes.
@@ -301,70 +314,239 @@ const Plots = ({ job }) => {
     const waitingForOutput = isActive && !dataFiles.length;
 
     return (
-        <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-            <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <label>
-                    Data File:
-                    <select value={selectedDataFile} onChange={handleDataFileChange}>
-                        <option value="">Select a data file</option>
-                        {dataFiles.map((file, index) => (
-                            <option key={index} value={file}>
-                                {file}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <label>
-                    Variable:
-                    <select value={selectedVariable} onChange={handleVariableChange} disabled={!selectedDataFile}>
-                        <option value="">Select a variable</option>
-                        {variables.map((variable, index) => (
-                            <option key={index} value={variable}>
-                                {variable}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <button
-                    onClick={exportChartAsPDF}
-                    style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#4A90E2',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        transition: 'background-color 0.3s'
-                    }}
-                >
-                    Export Plot
+        <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}>
+            {/* Tab bar */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #ddd', marginBottom: '20px' }}>
+                <button style={tabStyle("timeseries")} onClick={() => setActiveTab("timeseries")}>
+                    Time Series
                 </button>
-                <button
-                    onClick={exportPlotDataAsCSV}
-                    style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#4CAF50',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        transition: 'background-color 0.3s'
-                    }}
-                >
-                    Export Data
+                <button style={tabStyle("heatmap")} onClick={() => setActiveTab("heatmap")}>
+                    Surface Temperature
                 </button>
             </div>
-            {waitingForOutput && (
-                <div style={{ color: '#777', fontSize: '14px', marginBottom: '12px' }}>
-                    ⏳ Waiting for the model to write its first time-series output —
-                    the plot variables will appear here automatically once they are available.
-                </div>
+
+            {activeTab === "timeseries" && (
+                <>
+                    <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <label>
+                            Data File:
+                            <select value={selectedDataFile} onChange={handleDataFileChange}>
+                                <option value="">Select a data file</option>
+                                {dataFiles.map((file, index) => (
+                                    <option key={index} value={file}>
+                                        {file}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            Variable:
+                            <select value={selectedVariable} onChange={handleVariableChange} disabled={!selectedDataFile}>
+                                <option value="">Select a variable</option>
+                                {variables.map((variable, index) => (
+                                    <option key={index} value={variable}>
+                                        {variable}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <button
+                            onClick={exportChartAsPDF}
+                            style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#4A90E2',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                transition: 'background-color 0.3s'
+                            }}
+                        >
+                            Export Plot
+                        </button>
+                        <button
+                            onClick={exportPlotDataAsCSV}
+                            style={{
+                                padding: '8px 16px',
+                                backgroundColor: '#4CAF50',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                transition: 'background-color 0.3s'
+                            }}
+                        >
+                            Export Data
+                        </button>
+                    </div>
+                    {waitingForOutput && (
+                        <div style={{ color: '#777', fontSize: '14px', marginBottom: '12px' }}>
+                            ⏳ Waiting for the model to write its first time-series output —
+                            the plot variables will appear here automatically once they are available.
+                        </div>
+                    )}
+                    {renderLineChart()}
+                </>
             )}
-            {renderLineChart()}
+
+            {activeTab === "heatmap" && <TempHeatmap job={job} />}
+        </div>
+    );
+};
+
+// ---------------------------------------------------------------------------
+// TempHeatmap — polls /get-temp-snapshot and renders a Plotly heatmap of ocean
+// surface temperature (lon × lat). The model writes a snapshot 4x per model
+// year (seasonal); each carries a quarter-index change token so we only
+// re-render on a genuinely new frame. Polls every POLL_MS while the job is
+// active (mirrors the time-series + Output panels) and stops at terminal state.
+// ---------------------------------------------------------------------------
+// Pinned display ranges (°C) so the eye sees real spatial change rather than
+// Plotly auto-rescaling the colorbar every frame.
+const ABS_ZMIN = -2;
+const ABS_ZMAX = 32;
+const ANOM_RANGE = 2;   // anomaly view: symmetric ±2 °C about zero
+
+const TempHeatmap = ({ job }) => {
+    const jobName = job?.name || null;
+    const status = job?.status || null;
+    const [snapshotData, setSnapshotData] = useState(null);
+    const [viewMode, setViewMode] = useState("absolute"); // "absolute" | "anomaly"
+    const lastTokenRef = useRef(null);
+    const baselineRef = useRef(null);   // first frame's temp grid, for anomaly
+
+    // Reset when the selected job changes.
+    useEffect(() => {
+        setSnapshotData(null);
+        lastTokenRef.current = null;
+        baselineRef.current = null;
+    }, [jobName]);
+
+    // Poll the snapshot. Fetch immediately (so a completed job shows its final
+    // frame), then poll only while active. Re-render only when the change token
+    // advances. NFS freshness + atomic .nc sync make each read consistent.
+    useEffect(() => {
+        if (!jobName) return;
+        let cancelled = false;
+
+        const fetchSnapshot = async () => {
+            try {
+                const response = await api.get(`/get-temp-snapshot/${jobName}`);
+                if (cancelled) return;
+                if (response.data.token !== lastTokenRef.current) {
+                    lastTokenRef.current = response.data.token;
+                    if (baselineRef.current === null) {
+                        baselineRef.current = response.data.temp;
+                    }
+                    setSnapshotData(response.data);
+                }
+            } catch {
+                // snapshot not yet written (404) — keep polling silently
+            }
+        };
+
+        fetchSnapshot();
+        let intervalId;
+        if (ACTIVE_STATES.includes(status)) {
+            intervalId = setInterval(fetchSnapshot, POLL_MS);
+        }
+        return () => {
+            cancelled = true;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [jobName, status]);
+
+    // Re-baseline anomalies against the currently displayed frame.
+    const handleSetBaseline = () => {
+        if (snapshotData) baselineRef.current = snapshotData.temp;
+    };
+
+    if (!snapshotData) {
+        return (
+            <div style={{ padding: "20px", color: "#888" }}>
+                ⏳ Waiting for the temperature snapshot — the model writes one
+                4×/year (each season), so the first frame appears after spin-up.
+            </div>
+        );
+    }
+
+    const isAnomaly = viewMode === "anomaly";
+    const baseline = baselineRef.current;
+
+    // element-wise temp − baseline, preserving land mask (nulls)
+    const z = isAnomaly && baseline
+        ? snapshotData.temp.map((row, i) =>
+              row.map((v, j) => {
+                  const b = baseline?.[i]?.[j];
+                  return v == null || b == null ? null : v - b;
+              })
+          )
+        : snapshotData.temp;
+
+    const plotData = [
+        {
+            type: "heatmap",
+            x: snapshotData.lon,
+            y: snapshotData.lat,
+            z,
+            colorscale: "RdBu",
+            reversescale: false,
+            zmin: isAnomaly ? -ANOM_RANGE : ABS_ZMIN,
+            zmax: isAnomaly ? ANOM_RANGE : ABS_ZMAX,
+            zmid: isAnomaly ? 0 : undefined,
+            colorbar: { title: isAnomaly ? "Δ°C vs first" : "Temp (°C)" },
+        },
+    ];
+
+    const layout = {
+        title: isAnomaly
+            ? "Surface Temperature Anomaly (vs first frame)"
+            : "Ocean Surface Temperature",
+        xaxis: { title: "Longitude (°E)", range: [-180, 180], dtick: 60, zeroline: false },
+        // scaleanchor locks 1° lat == 1° lon in pixels so the map keeps its true
+        // equirectangular proportion (360° lon : 180° lat = 2:1) regardless of
+        // the panel width, instead of x/y stretching independently to fill the box.
+        yaxis: {
+            title: "Latitude (°N)", range: [-90, 90], dtick: 30, zeroline: false,
+            scaleanchor: "x", scaleratio: 1,
+        },
+        margin: { t: 40, r: 20, b: 48, l: 52 },
+    };
+
+    return (
+        <div>
+            <div style={{ marginBottom: "8px", fontSize: "13px" }}>
+                <label style={{ marginRight: "12px" }}>
+                    <input
+                        type="checkbox"
+                        checked={isAnomaly}
+                        onChange={(e) => setViewMode(e.target.checked ? "anomaly" : "absolute")}
+                    />{" "}
+                    Anomaly view (vs first frame)
+                </label>
+                {isAnomaly && (
+                    <button onClick={handleSetBaseline} style={{ fontSize: "12px" }}>
+                        Reset baseline to current
+                    </button>
+                )}
+            </div>
+            {/* 2:1 box so the equirectangular map (locked via scaleanchor) fills
+                it without letterboxing, and stays responsive to panel width. */}
+            <div style={{ width: "100%", maxWidth: 1100, aspectRatio: "2 / 1" }}>
+                <Plot
+                    data={plotData}
+                    layout={{ ...layout, autosize: true }}
+                    useResizeHandler
+                    style={{ width: "100%", height: "100%" }}
+                    // No modebar — the zoom/pan/download toolbar isn't needed for a
+                    // live map; keep only hover tooltips.
+                    config={{ responsive: true, displayModeBar: false, displaylogo: false }}
+                />
+            </div>
         </div>
     );
 };

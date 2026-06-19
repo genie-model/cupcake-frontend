@@ -68,6 +68,15 @@
   border: 2px solid #beb6b8;
 }
 
+/* The tab card (Status/Setup/Namelists/Output/Plots). Without this it
+   shrink-to-fits its content and never fills the content-area, leaving the
+   panels (and the temperature heatmap) cramped in the top-left. */
+.task {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* For highlighting the job selected */
 .selected-job {
   background-color: #e0e0e0; /* Light gray background */

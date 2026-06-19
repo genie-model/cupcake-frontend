@@ -20,9 +20,11 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
+    "plotly.js": "^3.6.0",
     "react": "^18.3.1",
     "react-bootstrap": "^2.10.2",
     "react-dom": "^18.3.1",
+    "react-plotly.js": "^2.6.0",
     "recharts": "^2.1.9",
     "web-vitals": "^2.1.4"
   },
