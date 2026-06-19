@@ -23,10 +23,13 @@ const RenderNode = ({
   isOpen,
   onClick,
   selected,
+  publishedRef,
 }) => {
   const marginLeft = `${2 * level}rem`;
+  const className =
+    `${selected ? "selected-job " : ""}${publishedRef ? "published-ref" : ""}`.trim();
   return (
-    <div style={{ marginLeft }} className={selected ? "selected-job" : ""}>
+    <div style={{ marginLeft }} className={className}>
       <JobIcon
         heading={heading}
         childExist={childExist}
@@ -65,6 +68,7 @@ const RenderTree = ({
           }
         }}
         selected={node.heading === selectedJob}
+        publishedRef={node.publishedRef}
       />
       {isOpen &&
         hasChild &&
@@ -104,6 +108,7 @@ const FileStructure = ({ onSelectJob, setRefreshJobs, selectedJobName }) => {
       const jobList = response.data.jobs
         .map((job) => ({
           heading: job.name,
+          publishedRef: !!job.published_ref,
           child: {},
         }))
         .sort((a, b) => a.heading.localeCompare(b.heading));

@@ -83,6 +83,16 @@
   border-left: 4px solid #05a4db; /* Highlight with a border */
 }
 
+/* Published-reference jobs (shared by another user) get a blue background so
+   they are recognisable as published jobs in the panel. */
+.published-ref {
+  background-color: #d6e8fb;
+  border-left: 4px solid #2c5d8f;
+}
+.published-ref.selected-job {
+  background-color: #aacdf2;
+}
+
 .output-container {
   display: flex;
   flex-direction: column;

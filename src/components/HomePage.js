@@ -10,6 +10,7 @@ import Setup from "./Setup";
 import Namelists from "./Namelists";
 import Output from "./Output";
 import Plots from "./Plots";
+import BrowsePublished from "./BrowsePublished";
 
 function HomePage({ onLogout }) {
   const [activeDiv, setActiveDiv] = useState(null);
@@ -19,7 +20,16 @@ function HomePage({ onLogout }) {
   const [newJobName, setNewJobName] = useState("");
   const [refreshJobs, setRefreshJobs] = useState(() => () => {});
   const [jobOutputs, setJobOutputs] = useState({});
+  const [showBrowse, setShowBrowse] = useState(false);
+  const [myEmail, setMyEmail] = useState("");
   const outputRef = useRef(null); // Reference to Output component
+
+  // Current user's email (used for the publish catalog's owner-only actions).
+  useEffect(() => {
+    api.get("/auth/me")
+      .then((res) => setMyEmail(res.data?.user?.email || ""))
+      .catch(() => {});
+  }, []);
 
   // Define icon classes, colors, and types for the job control palette
   const palleteIconClasses = [
@@ -48,6 +58,7 @@ function HomePage({ onLogout }) {
   };
 
   const handleSelectJob = async (jobName) => {
+    setShowBrowse(false); // selecting a job returns to the job tabs
     if (!jobName) {
       setSelectedJob(null);
       return;
@@ -171,7 +182,7 @@ function HomePage({ onLogout }) {
     return (
       <>
         <div style={{ display: activeDiv === "Status" ? "block" : "none" }}>
-          <Status job={selectedJob} />
+          <Status job={selectedJob} refreshJobs={refreshJobs} onSelectJob={handleSelectJob} />
         </div>
         <div style={{ display: activeDiv === "Setup" ? "block" : "none" }}>
           <Setup
@@ -279,16 +290,34 @@ function HomePage({ onLogout }) {
               setRefreshJobs={setRefreshJobs}
               selectedJobName={selectedJob?.name || null}
             />
+            <button
+              onClick={() => setShowBrowse(true)}
+              style={{
+                marginTop: "12px",
+                padding: "6px 10px",
+                backgroundColor: showBrowse ? "#2c5d8f" : "#4A90E2",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: "bold",
+                width: "90%",
+              }}
+            >
+              🔭 Browse Published
+            </button>
           </div>
           <div className="content-area">
             <div className="icons">
               {palleteIconClasses.map((iconClass, index) => {
                 const type = types[index];
+                const isRef = selectedJob && selectedJob.published_ref;
                 const runAllowed =
-                  selectedJob &&
+                  selectedJob && !isRef &&
                   ["RUNNABLE", "PAUSED", "RUNNING"].includes(selectedJob.status);
                 const pauseAllowed =
-                  selectedJob && selectedJob.status === "RUNNING";
+                  selectedJob && !isRef && selectedJob.status === "RUNNING";
                 const isDisabled =
                   (type === "Remove Job" && !selectedJob) ||
                   (type === "Run Job" && !runAllowed) ||
@@ -301,18 +330,29 @@ function HomePage({ onLogout }) {
               })}
             </div>
             <div className="task" style={{ position: "relative" }}>
-              <button onClick={() => handleButtonClick("Status")}>
-                Status
-              </button>
-              <button onClick={() => handleButtonClick("Setup")}>Setup</button>
-              <button onClick={() => handleButtonClick("Namelists")}>
-                Namelists
-              </button>
-              <button onClick={() => handleButtonClick("Output")}>
-                Output
-              </button>
-              <button onClick={() => handleButtonClick("Plots")}>Plots</button>
-              {renderContent()}
+              {showBrowse ? (
+                <BrowsePublished
+                  myEmail={myEmail}
+                  refreshJobs={refreshJobs}
+                  onSelectJob={handleSelectJob}
+                  onClose={() => setShowBrowse(false)}
+                />
+              ) : (
+                <>
+                  <button onClick={() => handleButtonClick("Status")}>
+                    Status
+                  </button>
+                  <button onClick={() => handleButtonClick("Setup")}>Setup</button>
+                  <button onClick={() => handleButtonClick("Namelists")}>
+                    Namelists
+                  </button>
+                  <button onClick={() => handleButtonClick("Output")}>
+                    Output
+                  </button>
+                  <button onClick={() => handleButtonClick("Plots")}>Plots</button>
+                  {renderContent()}
+                </>
+              )}
             </div>
           </div>
         </div>
