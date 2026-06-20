@@ -5,6 +5,7 @@ import "./AdminPage.css";
 const AdminPage = ({ onLogout, onExitAdmin }) => {
   const [users, setUsers] = useState([]);
   const [activeRuns, setActiveRuns] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const [expandedUser, setExpandedUser] = useState(null);
   const [userJobs, setUserJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +20,34 @@ const AdminPage = ({ onLogout, onExitAdmin }) => {
     }
   }, []);
 
+  const fetchPendingRequests = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/registration-requests");
+      setPendingRequests(res.data.requests || []);
+    } catch (err) {
+      console.error("Failed to load registration requests", err);
+    }
+  }, []);
+
+  const handleApproveRequest = async (id, email) => {
+    try {
+      await api.post(`/admin/registration-requests/${id}/approve`);
+      await Promise.all([fetchPendingRequests(), fetchUsers()]);
+    } catch (err) {
+      alert(err?.response?.data?.detail || "Failed to approve request");
+    }
+  };
+
+  const handleRejectRequest = async (id, email) => {
+    if (!window.confirm(`Reject the registration request from "${email}"?`)) return;
+    try {
+      await api.post(`/admin/registration-requests/${id}/reject`);
+      await fetchPendingRequests();
+    } catch (err) {
+      alert(err?.response?.data?.detail || "Failed to reject request");
+    }
+  };
+
   const fetchActiveRuns = useCallback(async () => {
     try {
       const res = await api.get("/admin/runs");
@@ -31,9 +60,9 @@ const AdminPage = ({ onLogout, onExitAdmin }) => {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
-    await Promise.all([fetchUsers(), fetchActiveRuns()]);
+    await Promise.all([fetchUsers(), fetchActiveRuns(), fetchPendingRequests()]);
     setLoading(false);
-  }, [fetchUsers, fetchActiveRuns]);
+  }, [fetchUsers, fetchActiveRuns, fetchPendingRequests]);
 
   useEffect(() => {
     refresh();
@@ -103,6 +132,57 @@ const AdminPage = ({ onLogout, onExitAdmin }) => {
       </header>
 
       {error && <div className="admin-error">{error}</div>}
+
+      {/* Pending Registration Requests Panel */}
+      <section className="admin-section">
+        <div className="admin-section-header">
+          <h2 className="admin-section-title">
+            Pending Registration Requests
+            <span className="admin-badge">{pendingRequests.length}</span>
+          </h2>
+          <button className="admin-btn admin-btn-small" onClick={fetchPendingRequests}>
+            Refresh
+          </button>
+        </div>
+        {pendingRequests.length === 0 ? (
+          <p className="admin-muted">No pending requests</p>
+        ) : (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Requested</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingRequests.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.email}</td>
+                    <td>{r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</td>
+                    <td>
+                      <button
+                        className="admin-btn admin-btn-small"
+                        style={{ marginRight: "6px" }}
+                        onClick={() => handleApproveRequest(r.id, r.email)}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className="admin-btn admin-btn-danger admin-btn-small"
+                        onClick={() => handleRejectRequest(r.id, r.email)}
+                      >
+                        Reject
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* Active Runs Panel */}
       <section className="admin-section">

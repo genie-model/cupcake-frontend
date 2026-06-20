@@ -9,14 +9,26 @@ const Auth = ({ onAuthSuccess }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setInfo("");
     try {
       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
       const res = await api.post(endpoint, { email, password });
+
+      // Registration is admin-approved: no token is issued. Show the pending
+      // message and switch back to the login view.
+      if (mode === "register") {
+        setInfo(res.data?.message || "Registration request submitted. An admin must approve your account before you can log in.");
+        setMode("login");
+        setPassword("");
+        return;
+      }
+
       const { token, user } = res.data;
 
       if (mode === "admin" && !ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
@@ -43,6 +55,7 @@ const Auth = ({ onAuthSuccess }) => {
   const toggleMode = () => {
     setMode((prev) => (prev === "login" ? "register" : "login"));
     setError("");
+    setInfo("");
   };
 
   const subtitle = mode === "admin" ? "Admin Login" : mode === "login" ? "Sign in" : "Create account";
@@ -83,6 +96,7 @@ const Auth = ({ onAuthSuccess }) => {
             </button>
           </div>
           {error && <div className="auth-error">{error}</div>}
+          {info && <div className="auth-info" style={{ color: "#2c5d8f", background: "#eef4fb", border: "1px solid #b6d4f2", borderRadius: "5px", padding: "8px 10px", fontSize: "13px", marginBottom: "8px" }}>{info}</div>}
           <button type="submit" className="auth-button">{buttonLabel}</button>
         </form>
         {mode === "admin" ? (
