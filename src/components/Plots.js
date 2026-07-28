@@ -18,7 +18,7 @@ const Plots = ({ job }) => {
     const [chartData, setChartData] = useState([]);
     const [selectedDataFile, setSelectedDataFile] = useState('');
     const [selectedVariable, setSelectedVariable] = useState('');
-    const [activeTab, setActiveTab] = useState("timeseries"); // "timeseries" | "heatmap"
+    const [activeTab, setActiveTab] = useState("timeseries"); // "timeseries" | "heatmap" | "fields"
     const chartRef = useRef(null);
 
     const tabStyle = (tab) => ({
@@ -323,6 +323,9 @@ const Plots = ({ job }) => {
                 <button style={tabStyle("heatmap")} onClick={() => setActiveTab("heatmap")}>
                     Surface Temperature
                 </button>
+                <button style={tabStyle("fields")} onClick={() => setActiveTab("fields")}>
+                    2D Fields
+                </button>
             </div>
 
             {activeTab === "timeseries" && (
@@ -394,6 +397,8 @@ const Plots = ({ job }) => {
             )}
 
             {activeTab === "heatmap" && <TempHeatmap job={job} />}
+
+            {activeTab === "fields" && <FieldsPlot job={job} />}
         </div>
     );
 };
@@ -549,6 +554,292 @@ const TempHeatmap = ({ job }) => {
             </div>
         </div>
     );
+};
+
+// ---------------------------------------------------------------------------
+// FieldsPlot — live 2D spatial plots for every model variable.
+//
+// Reads /get-fields-meta once to build the dropdowns (variable, slice type, and
+// depth/latitude), then polls /get-field-snapshot for the selected variable's
+// full array and slices it client-side, so changing depth or latitude is
+// instant (no extra request). The model writes one annual-mean frame per model
+// year; the year is the change token (re-render only on a new year) and is shown
+// as a "Year: xxx" label. Poll only while the job is active.
+//
+//   - Horizontal slice: a lon × lat map at a chosen depth level (locked
+//     equirectangular aspect, like the SST map).
+//   - Vertical slice: a lon × depth section at a chosen latitude (surface on
+//     top). Only offered for variables that have a depth dimension.
+//
+// Colour range uses the whole run's observed min/max, expanding as new extremes
+// arrive (never clips, no per-variable tuning) so colour == value across frames.
+// ---------------------------------------------------------------------------
+const FieldsPlot = ({ job }) => {
+    const jobName = job?.name || null;
+    const status = job?.status || null;
+
+    const [meta, setMeta] = useState(null);          // { lon, lat, depth, variables }
+    const [selectedVar, setSelectedVar] = useState("");
+    const [sliceType, setSliceType] = useState("horizontal"); // "horizontal" | "vertical"
+    const [depthIdx, setDepthIdx] = useState(0);
+    const [latIdx, setLatIdx] = useState(0);
+    const [fieldData, setFieldData] = useState(null); // { token, is3d, values }
+
+    const lastTokenRef = useRef(null);
+    const rangeRef = useRef(null);   // { min, max } expanding across frames for selectedVar
+
+    // Reset everything when the job changes.
+    useEffect(() => {
+        setMeta(null);
+        setSelectedVar("");
+        setSliceType("horizontal");
+        setDepthIdx(0);
+        setLatIdx(0);
+        setFieldData(null);
+        lastTokenRef.current = null;
+        rangeRef.current = null;
+    }, [jobName]);
+
+    // Fetch metadata (axes + variable list). Available from run start (model
+    // writes a zero-filled snapshot at init). Poll until it loads, then stop.
+    useEffect(() => {
+        if (!jobName || meta) return;
+        let cancelled = false;
+
+        const fetchMeta = async () => {
+            try {
+                const { data } = await api.get(`/get-fields-meta/${jobName}`);
+                if (cancelled || !data.variables?.length) return;
+                setMeta(data);
+                setSelectedVar((prev) => prev || data.variables[0].name);
+                setLatIdx(Math.floor((data.lat?.length || 1) / 2)); // default: near equator
+            } catch {
+                // snapshot not synced yet (404) — keep polling
+            }
+        };
+
+        fetchMeta();
+        let intervalId;
+        if (ACTIVE_STATES.includes(status)) intervalId = setInterval(fetchMeta, POLL_MS);
+        return () => {
+            cancelled = true;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [jobName, status, meta]);
+
+    // Reset the frame + colour range whenever the selected variable changes, so
+    // the next poll re-fetches and re-scales for the new variable.
+    useEffect(() => {
+        lastTokenRef.current = null;
+        rangeRef.current = null;
+        setFieldData(null);
+    }, [selectedVar]);
+
+    // Poll the selected variable's array. Re-render only on a new change token.
+    useEffect(() => {
+        if (!jobName || !selectedVar) return;
+        let cancelled = false;
+
+        const fetchField = async () => {
+            try {
+                const { data } = await api.get(`/get-field-snapshot/${jobName}/${selectedVar}`);
+                if (cancelled) return;
+                // token is the model year; the zero-filled init file carries -1, so
+                // ignore it and wait for the first real annual-mean frame.
+                if (data.token >= 0 && data.token !== lastTokenRef.current) {
+                    lastTokenRef.current = data.token;
+                    // expand the observed colour range over the whole field (all depths)
+                    const r = rangeRef.current || { min: Infinity, max: -Infinity };
+                    const scan = (a) => {
+                        for (const el of a) {
+                            if (Array.isArray(el)) scan(el);
+                            else if (el != null && Number.isFinite(el)) {
+                                if (el < r.min) r.min = el;
+                                if (el > r.max) r.max = el;
+                            }
+                        }
+                    };
+                    scan(data.values);
+                    rangeRef.current = r;
+                    setFieldData(data);
+                }
+            } catch {
+                // not written yet — keep polling silently
+            }
+        };
+
+        fetchField();
+        let intervalId;
+        if (ACTIVE_STATES.includes(status)) intervalId = setInterval(fetchField, POLL_MS);
+        return () => {
+            cancelled = true;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [jobName, status, selectedVar]);
+
+    if (!meta) {
+        return (
+            <div style={{ padding: "20px", color: "#888" }}>
+                ⏳ Loading the list of plottable variables…
+            </div>
+        );
+    }
+
+    const varMeta = meta.variables.find((v) => v.name === selectedVar) || null;
+    const is3d = varMeta ? varMeta.is3d : false;
+    // A 2D variable has no vertical section — force horizontal.
+    const effSlice = is3d ? sliceType : "horizontal";
+
+    // Build the Plotly z-grid + axes from the current slice selection.
+    let z = null, xData = meta.lon, yData = meta.lat;
+    if (fieldData && fieldData.values) {
+        if (effSlice === "horizontal") {
+            z = is3d ? fieldData.values[depthIdx] : fieldData.values; // lat × lon
+            xData = meta.lon; yData = meta.lat;
+        } else if (effSlice === "vertical") {
+            // vertical: values are [depth][lat][lon]; take the chosen latitude → [depth][lon]
+            z = fieldData.values.map((depthRow) => depthRow[latIdx]);
+            xData = meta.lon; yData = meta.depth;
+        } else {
+            // zonal mean: average each [depth][lat] row across longitude (skipping
+            // land/null cells) → a depth × latitude section, no longitude chosen.
+            z = fieldData.values.map((depthRow) =>
+                depthRow.map((lonRow) => {
+                    const vals = lonRow.filter((v) => v != null && Number.isFinite(v));
+                    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+                })
+            );
+            xData = meta.lat; yData = meta.depth;
+        }
+    }
+
+    const r = rangeRef.current;
+    const haveRange = r && Number.isFinite(r.min) && Number.isFinite(r.max) && r.max > r.min;
+    const unitStr = varMeta?.units ? ` (${varMeta.units})` : "";
+
+    const plotData = z
+        ? [{
+            type: "heatmap",
+            x: xData,
+            y: yData,
+            z,
+            colorscale: "Viridis",
+            zmin: haveRange ? r.min : undefined,
+            zmax: haveRange ? r.max : undefined,
+            colorbar: { title: varMeta?.units || "" },
+        }]
+        : [];
+
+    const horizLayout = {
+        title: `${varMeta?.label || selectedVar}${unitStr}`,
+        xaxis: { title: "Longitude (°E)", range: [-180, 180], dtick: 60, zeroline: false },
+        // lock 1° lat == 1° lon so the map keeps true 2:1 equirectangular proportion
+        yaxis: {
+            title: "Latitude (°N)", range: [-90, 90], dtick: 30, zeroline: false,
+            scaleanchor: "x", scaleratio: 1,
+        },
+        margin: { t: 40, r: 20, b: 48, l: 52 },
+    };
+    const vertLayout = {
+        title: `${varMeta?.label || selectedVar}${unitStr} — section @ ${fmtLat(meta.lat?.[latIdx])}`,
+        xaxis: { title: "Longitude (°E)", range: [-180, 180], dtick: 60, zeroline: false },
+        // depth is not degrees, so no scaleanchor; surface (shallowest) on top
+        yaxis: { title: "Depth (m)", autorange: "reversed", zeroline: false },
+        margin: { t: 40, r: 20, b: 48, l: 60 },
+    };
+    const zonalLayout = {
+        title: `${varMeta?.label || selectedVar}${unitStr} — zonal mean (avg over longitude)`,
+        xaxis: { title: "Latitude (°N)", range: [-90, 90], dtick: 30, zeroline: false },
+        // depth vs latitude; surface (shallowest) on top
+        yaxis: { title: "Depth (m)", autorange: "reversed", zeroline: false },
+        margin: { t: 40, r: 20, b: 48, l: 60 },
+    };
+    const layout = effSlice === "horizontal" ? horizLayout
+        : effSlice === "zonal" ? zonalLayout : vertLayout;
+    // horizontal keeps a fixed 2:1 box; vertical / zonal fill a shorter wide box
+    const boxStyle = effSlice === "horizontal"
+        ? { width: "100%", maxWidth: 1100, aspectRatio: "2 / 1" }
+        : { width: "100%", maxWidth: 1100, height: 380 };
+
+    const controlStyle = { fontSize: "13px", marginRight: "16px" };
+
+    return (
+        <div>
+            <div style={{ marginBottom: "12px", display: "flex", flexWrap: "wrap", alignItems: "center" }}>
+                <label style={controlStyle}>
+                    Variable:{" "}
+                    <select value={selectedVar} onChange={(e) => setSelectedVar(e.target.value)}>
+                        {meta.variables.map((v) => (
+                            <option key={v.name} value={v.name}>{v.label}</option>
+                        ))}
+                    </select>
+                </label>
+                <label style={controlStyle}>
+                    Slice:{" "}
+                    <select
+                        value={effSlice}
+                        onChange={(e) => setSliceType(e.target.value)}
+                        disabled={!is3d}
+                        title={is3d ? "" : "This variable is surface-only (no vertical section)"}
+                    >
+                        <option value="horizontal">Horizontal (map)</option>
+                        <option value="vertical">Vertical (section)</option>
+                        <option value="zonal">Zonal mean (section)</option>
+                    </select>
+                </label>
+                {effSlice === "horizontal" && is3d && (
+                    <label style={controlStyle}>
+                        Depth:{" "}
+                        <select value={depthIdx} onChange={(e) => setDepthIdx(Number(e.target.value))}>
+                            {meta.depth.map((d, i) => (
+                                <option key={i} value={i}>{Math.round(d)} m</option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+                {effSlice === "vertical" && (
+                    <label style={controlStyle}>
+                        Latitude:{" "}
+                        <select value={latIdx} onChange={(e) => setLatIdx(Number(e.target.value))}>
+                            {meta.lat.map((la, i) => (
+                                <option key={i} value={i}>{fmtLat(la)}</option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+            </div>
+
+            {!fieldData ? (
+                <div style={{ padding: "20px", color: "#888" }}>
+                    ⏳ Waiting for the first annual-average frame — the model writes one
+                    per model year, so the first frame appears once year 1 completes.
+                </div>
+            ) : (
+                <>
+                    <div style={{ fontSize: "15px", fontWeight: "bold", color: "#333", marginBottom: "6px" }}>
+                        Year: {fieldData.year}
+                    </div>
+                    <div style={boxStyle}>
+                        <Plot
+                            data={plotData}
+                            layout={{ ...layout, autosize: true }}
+                            useResizeHandler
+                            style={{ width: "100%", height: "100%" }}
+                            config={{ responsive: true, displayModeBar: false, displaylogo: false }}
+                        />
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+// Format a latitude value as e.g. "18°N" / "6°S" / "0°".
+const fmtLat = (v) => {
+    if (v == null) return "";
+    const r = Math.round(v);
+    if (r === 0) return "0°";
+    return `${Math.abs(r)}°${r > 0 ? "N" : "S"}`;
 };
 
 export default Plots;
