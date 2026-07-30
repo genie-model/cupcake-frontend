@@ -492,12 +492,16 @@ const TempHeatmap = ({ job }) => {
           )
         : snapshotData.temp;
 
+    // tile lon ±360 so the fixed -180..180 map is fully covered despite the grid's
+    // offset origin (par_grid_lon_offset = -260); otherwise the wrap-around is white
+    const { x: tiledLon, z: tiledZ } = tileLon(snapshotData.lon, z);
+
     const plotData = [
         {
             type: "heatmap",
-            x: snapshotData.lon,
+            x: tiledLon,
             y: snapshotData.lat,
-            z,
+            z: tiledZ,
             colorscale: "RdBu",
             reversescale: false,
             zmin: isAnomaly ? -ANOM_RANGE : ABS_ZMIN,
@@ -694,12 +698,16 @@ const FieldsPlot = ({ job }) => {
     let z = null, xData = meta.lon, yData = meta.lat;
     if (fieldData && fieldData.values) {
         if (effSlice === "horizontal") {
-            z = is3d ? fieldData.values[depthIdx] : fieldData.values; // lat × lon
-            xData = meta.lon; yData = meta.lat;
+            const base = is3d ? fieldData.values[depthIdx] : fieldData.values; // [lat][lon]
+            // tile lon ±360 so the -180..180 display is fully covered despite the
+            // grid's offset origin (see tileLon) — otherwise the wrap-around is white
+            const t = tileLon(meta.lon, base);
+            z = t.z; xData = t.x; yData = meta.lat;
         } else if (effSlice === "vertical") {
             // vertical: values are [depth][lat][lon]; take the chosen latitude → [depth][lon]
-            z = fieldData.values.map((depthRow) => depthRow[latIdx]);
-            xData = meta.lon; yData = meta.depth;
+            const base = fieldData.values.map((depthRow) => depthRow[latIdx]);
+            const t = tileLon(meta.lon, base);
+            z = t.z; xData = t.x; yData = meta.depth;
         } else {
             // zonal mean: average each [depth][lat] row across longitude (skipping
             // land/null cells) → a depth × latitude section, no longitude chosen.
@@ -833,6 +841,18 @@ const FieldsPlot = ({ job }) => {
         </div>
     );
 };
+
+// Tile a longitude axis (and its data columns) ±360 so a fixed -180..180 display
+// window is fully covered even though the GENIE grid's longitude origin is offset
+// (par_grid_lon_offset = -260 → lon runs ~-255..+95). Without this, the wrapped-
+// around strip has no data and renders as white gaps (the incomplete-plot bug).
+// `rows` is an array of longitude-indexed rows (lat×lon or depth×lon); each row is
+// tripled and the x-axis becomes [lon-360, lon, lon+360] (monotonic, seamless).
+// Land/null cells replicate as-is, so real land stays white — only the wrap fills.
+const tileLon = (lon, rows) => ({
+    x: [...lon.map((l) => l - 360), ...lon, ...lon.map((l) => l + 360)],
+    z: rows.map((row) => [...row, ...row, ...row]),
+});
 
 // Format a latitude value as e.g. "18°N" / "6°S" / "0°".
 const fmtLat = (v) => {
