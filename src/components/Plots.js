@@ -561,36 +561,66 @@ const TempHeatmap = ({ job }) => {
 };
 
 // ---------------------------------------------------------------------------
-// FieldsPlot — live 2D spatial plots for every model variable.
+// FieldsPlot — live 2D spatial plots for every model variable, with history.
 //
-// Reads /get-fields-meta once to build the dropdowns (variable, slice type, and
-// depth/latitude), then polls /get-field-snapshot for the selected variable's
-// full array and slices it client-side, so changing depth or latitude is
-// instant (no extra request). The model writes one annual-mean frame per model
-// year; the year is the change token (re-render only on a new year) and is shown
-// as a "Year: xxx" label. Poll only while the job is active.
+// /get-fields-meta builds the menus (available from run start: the model writes
+// a zero-filled snapshot at init). The model keeps one annual-mean frame per
+// sampled year (<= 200 per job); /get-field-frames lists the years and
+// /get-field-snapshot?year= serves one variable's full array for a year, which
+// is sliced client-side, so depth / latitude changes need no request.
 //
-//   - Horizontal slice: a lon × lat map at a chosen depth level (locked
-//     equirectangular aspect, like the SST map).
-//   - Vertical slice: a lon × depth section at a chosen latitude (surface on
-//     top). Only offered for variables that have a depth dimension.
-//
-// Colour range uses the whole run's observed min/max, expanding as new extremes
-// arrive (never clips, no per-variable tuning) so colour == value across frames.
+//   - Time slider: follows the newest year while the run is going; scrubbing
+//     back pins it, "Live" resumes following, ▶ plays through the years.
+//   - Slices: horizontal map at a depth (vertical depth slider, surface on top),
+//     vertical lon x depth section at a latitude (latitude slider), zonal mean.
+//   - Colour scale: Per frame (default; stretched to the slice on screen),
+//     Fixed (that slice's range across all years, so a colour means the same
+//     value in every year) or Manual (user min/max). The colormap and manual
+//     min/max are remembered per variable in this browser.
 // ---------------------------------------------------------------------------
+const PLAY_MS = 700;          // pause between years when playing
+const FRAME_CACHE_MAX = 80;   // (variable, year) arrays kept in memory
+const PREFS_KEY = "ctoaster.fields.prefs";
+
+// matplotlib "plasma" (not one of Plotly's built-in names)
+const PLASMA = [
+    [0.0, "#0d0887"], [0.111, "#46039f"], [0.222, "#7201a8"], [0.333, "#9c179e"],
+    [0.444, "#bd3786"], [0.556, "#d8576b"], [0.667, "#ed7953"], [0.778, "#fb9f3a"],
+    [0.889, "#fdca26"], [1.0, "#f0f921"],
+];
+const COLORMAPS = { Viridis: "Viridis", Plasma: PLASMA, RdBu: "RdBu", Greys: "Greys" };
+const SCALE_MODES = { frame: "Per frame", fixed: "Fixed (all years)", manual: "Manual" };
+
 const FieldsPlot = ({ job }) => {
     const jobName = job?.name || null;
     const status = job?.status || null;
+    const active = ACTIVE_STATES.includes(status);
 
     const [meta, setMeta] = useState(null);          // { lon, lat, depth, variables }
     const [selectedVar, setSelectedVar] = useState("");
-    const [sliceType, setSliceType] = useState("horizontal"); // "horizontal" | "vertical"
+    const [sliceType, setSliceType] = useState("horizontal"); // horizontal | vertical | zonal
     const [depthIdx, setDepthIdx] = useState(0);
     const [latIdx, setLatIdx] = useState(0);
-    const [fieldData, setFieldData] = useState(null); // { token, is3d, values }
 
-    const lastTokenRef = useRef(null);
-    const rangeRef = useRef(null);   // { min, max } expanding across frames for selectedVar
+    const [years, setYears] = useState([]);          // years with a frame, ascending
+    const [viewYear, setViewYear] = useState(null);  // year on screen
+    const [following, setFollowing] = useState(true);
+    const [playing, setPlaying] = useState(false);
+    const [field, setField] = useState(null);        // { var, year, is3d, values }
+
+    const [scaleMode, setScaleMode] = useState("frame");
+    const [prefs, setPrefs] = useState(loadPrefs);   // { [var]: { cmap, min, max } }
+    const [fixedRange, setFixedRange] = useState(null); // { key, min, max }
+
+    const cacheRef = useRef(new Map());
+
+    const varMeta = meta?.variables.find((v) => v.name === selectedVar) || null;
+    const is3d = varMeta ? varMeta.is3d : false;
+    // A surface-only variable has no section — force the map.
+    const effSlice = is3d ? sliceType : "horizontal";
+    const sliceIndex = effSlice === "horizontal" ? (is3d ? depthIdx : 0)
+        : effSlice === "vertical" ? latIdx : null;
+    const rangeKey = `${selectedVar}|${effSlice}|${sliceIndex}`;
 
     // Reset everything when the job changes.
     useEffect(() => {
@@ -599,17 +629,19 @@ const FieldsPlot = ({ job }) => {
         setSliceType("horizontal");
         setDepthIdx(0);
         setLatIdx(0);
-        setFieldData(null);
-        lastTokenRef.current = null;
-        rangeRef.current = null;
+        setYears([]);
+        setViewYear(null);
+        setFollowing(true);
+        setPlaying(false);
+        setField(null);
+        setFixedRange(null);
+        cacheRef.current = new Map();
     }, [jobName]);
 
-    // Fetch metadata (axes + variable list). Available from run start (model
-    // writes a zero-filled snapshot at init). Poll until it loads, then stop.
+    // Metadata (axes + variable list). Poll until it loads, then stop.
     useEffect(() => {
         if (!jobName || meta) return;
         let cancelled = false;
-
         const fetchMeta = async () => {
             try {
                 const { data } = await api.get(`/get-fields-meta/${jobName}`);
@@ -621,65 +653,101 @@ const FieldsPlot = ({ job }) => {
                 // snapshot not synced yet (404) — keep polling
             }
         };
-
         fetchMeta();
-        let intervalId;
-        if (ACTIVE_STATES.includes(status)) intervalId = setInterval(fetchMeta, POLL_MS);
+        const id = active ? setInterval(fetchMeta, POLL_MS) : null;
         return () => {
             cancelled = true;
-            if (intervalId) clearInterval(intervalId);
+            if (id) clearInterval(id);
         };
-    }, [jobName, status, meta]);
+    }, [jobName, active, meta]);
 
-    // Reset the frame + colour range whenever the selected variable changes, so
-    // the next poll re-fetches and re-scales for the new variable.
+    // Years with a frame. Polled while the run is active; once otherwise.
     useEffect(() => {
-        lastTokenRef.current = null;
-        rangeRef.current = null;
-        setFieldData(null);
-    }, [selectedVar]);
-
-    // Poll the selected variable's array. Re-render only on a new change token.
-    useEffect(() => {
-        if (!jobName || !selectedVar) return;
+        if (!jobName) return;
         let cancelled = false;
-
-        const fetchField = async () => {
+        const fetchYears = async () => {
             try {
-                const { data } = await api.get(`/get-field-snapshot/${jobName}/${selectedVar}`);
-                if (cancelled) return;
-                // token is the model year; the zero-filled init file carries -1, so
-                // ignore it and wait for the first real annual-mean frame.
-                if (data.token >= 0 && data.token !== lastTokenRef.current) {
-                    lastTokenRef.current = data.token;
-                    // expand the observed colour range over the whole field (all depths)
-                    const r = rangeRef.current || { min: Infinity, max: -Infinity };
-                    const scan = (a) => {
-                        for (const el of a) {
-                            if (Array.isArray(el)) scan(el);
-                            else if (el != null && Number.isFinite(el)) {
-                                if (el < r.min) r.min = el;
-                                if (el > r.max) r.max = el;
-                            }
-                        }
-                    };
-                    scan(data.values);
-                    rangeRef.current = r;
-                    setFieldData(data);
-                }
+                const { data } = await api.get(`/get-field-frames/${jobName}`);
+                if (!cancelled) setYears((prev) => (sameList(prev, data.years) ? prev : data.years));
             } catch {
-                // not written yet — keep polling silently
+                // nothing written yet
             }
         };
-
-        fetchField();
-        let intervalId;
-        if (ACTIVE_STATES.includes(status)) intervalId = setInterval(fetchField, POLL_MS);
+        fetchYears();
+        const id = active ? setInterval(fetchYears, POLL_MS) : null;
         return () => {
             cancelled = true;
-            if (intervalId) clearInterval(intervalId);
+            if (id) clearInterval(id);
         };
-    }, [jobName, status, selectedVar]);
+    }, [jobName, active]);
+
+    // While following, keep the newest year on screen.
+    useEffect(() => {
+        if (following && years.length) setViewYear(years[years.length - 1]);
+    }, [following, years]);
+
+    // The selected variable's array for the year on screen (frames never change,
+    // so each (variable, year) is fetched once and cached).
+    useEffect(() => {
+        if (!jobName || !selectedVar || viewYear == null) return;
+        const key = `${selectedVar}|${viewYear}`;
+        const hit = cacheRef.current.get(key);
+        if (hit) {
+            setField(hit);
+            return;
+        }
+        let cancelled = false;
+        api.get(`/get-field-snapshot/${jobName}/${selectedVar}`, { params: { year: viewYear } })
+            .then(({ data }) => {
+                const f = { var: selectedVar, year: data.year, is3d: data.is3d, values: data.values };
+                remember(cacheRef.current, key, f);
+                if (!cancelled) setField(f);
+            })
+            .catch(() => {
+                // frame not readable yet; the next years poll will retry
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [jobName, selectedVar, viewYear]);
+
+    // Play: step to the next year once the current one is on screen; stop at the end.
+    useEffect(() => {
+        if (!playing || field?.year !== viewYear || field?.var !== selectedVar) return;
+        const id = setTimeout(() => {
+            const i = years.indexOf(viewYear);
+            if (i < 0 || i >= years.length - 1) setPlaying(false);
+            else setViewYear(years[i + 1]);
+        }, PLAY_MS);
+        return () => clearTimeout(id);
+    }, [playing, field, viewYear, selectedVar, years]);
+
+    // Fixed scale: this slice's range across every year (refreshed as years arrive).
+    useEffect(() => {
+        if (scaleMode !== "fixed" || !jobName || !selectedVar || !years.length) return;
+        let cancelled = false;
+        const params = { slice: effSlice };
+        if (sliceIndex != null) params.index = sliceIndex;
+        api.get(`/get-field-range/${jobName}/${selectedVar}`, { params })
+            .then(({ data }) => {
+                if (!cancelled) setFixedRange({ key: rangeKey, min: data.min, max: data.max });
+            })
+            .catch(() => {
+                if (!cancelled) setFixedRange(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [scaleMode, jobName, selectedVar, effSlice, sliceIndex, rangeKey, years.length]);
+
+    // Remember colormap + manual range per variable (best effort).
+    useEffect(() => {
+        try {
+            localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+        } catch {
+            // storage unavailable (private window etc.) — settings just won't persist
+        }
+    }, [prefs]);
 
     if (!meta) {
         return (
@@ -689,51 +757,60 @@ const FieldsPlot = ({ job }) => {
         );
     }
 
-    const varMeta = meta.variables.find((v) => v.name === selectedVar) || null;
-    const is3d = varMeta ? varMeta.is3d : false;
-    // A 2D variable has no vertical section — force horizontal.
-    const effSlice = is3d ? sliceType : "horizontal";
+    const shown = field && field.var === selectedVar ? field : null;
+    const grid = shown ? sliceGrid(shown, effSlice, depthIdx, latIdx, meta) : null;
+    const frameRange = grid ? gridRange(grid.z) : null;
+    const pref = prefs[selectedVar] || {};
+    const cmapName = COLORMAPS[pref.cmap] ? pref.cmap : "Viridis";
+    const updatePref = (patch) =>
+        setPrefs((p) => ({ ...p, [selectedVar]: { ...(p[selectedVar] || {}), ...patch } }));
 
-    // Build the Plotly z-grid + axes from the current slice selection.
-    let z = null, xData = meta.lon, yData = meta.lat;
-    if (fieldData && fieldData.values) {
-        if (effSlice === "horizontal") {
-            const base = is3d ? fieldData.values[depthIdx] : fieldData.values; // [lat][lon]
-            // tile lon ±360 so the -180..180 display is fully covered despite the
-            // grid's offset origin (see tileLon) — otherwise the wrap-around is white
-            const t = tileLon(meta.lon, base);
-            z = t.z; xData = t.x; yData = meta.lat;
-        } else if (effSlice === "vertical") {
-            // vertical: values are [depth][lat][lon]; take the chosen latitude → [depth][lon]
-            const base = fieldData.values.map((depthRow) => depthRow[latIdx]);
-            const t = tileLon(meta.lon, base);
-            z = t.z; xData = t.x; yData = meta.depth;
-        } else {
-            // zonal mean: average each [depth][lat] row across longitude (skipping
-            // land/null cells) → a depth × latitude section, no longitude chosen.
-            z = fieldData.values.map((depthRow) =>
-                depthRow.map((lonRow) => {
-                    const vals = lonRow.filter((v) => v != null && Number.isFinite(v));
-                    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-                })
-            );
-            xData = meta.lat; yData = meta.depth;
-        }
+    let range = frameRange;
+    if (scaleMode === "fixed" && fixedRange?.key === rangeKey) range = fixedRange;
+    if (scaleMode === "manual" && isNum(pref.min) && isNum(pref.max) && pref.max > pref.min) {
+        range = { min: pref.min, max: pref.max };
     }
+    const haveRange = range && range.max > range.min;
 
-    const r = rangeRef.current;
-    const haveRange = r && Number.isFinite(r.min) && Number.isFinite(r.max) && r.max > r.min;
+    const onScaleMode = (mode) => {
+        // Manual starts from the range currently on screen.
+        if (mode === "manual" && !(isNum(pref.min) && isNum(pref.max)) && frameRange) {
+            updatePref(roundedRange(frameRange));
+        }
+        setScaleMode(mode);
+    };
+    const resetManual = () => frameRange && updatePref(roundedRange(frameRange));
+
+    const yearIdx = Math.max(0, years.indexOf(viewYear));
+    const scrubTo = (i) => {
+        setPlaying(false);
+        setFollowing(false);
+        setViewYear(years[i]);
+    };
+    const togglePlay = () => {
+        if (playing) {
+            setPlaying(false);
+            return;
+        }
+        setFollowing(false);
+        if (yearIdx >= years.length - 1) setViewYear(years[0]); // replay from the start
+        setPlaying(true);
+    };
+    const goLive = () => {
+        setPlaying(false);
+        setFollowing(true);
+    };
+
     const unitStr = varMeta?.units ? ` (${varMeta.units})` : "";
-
-    const plotData = z
+    const plotData = grid
         ? [{
             type: "heatmap",
-            x: xData,
-            y: yData,
-            z,
-            colorscale: "Viridis",
-            zmin: haveRange ? r.min : undefined,
-            zmax: haveRange ? r.max : undefined,
+            x: grid.x,
+            y: grid.y,
+            z: grid.z,
+            colorscale: COLORMAPS[cmapName],
+            zmin: haveRange ? range.min : undefined,
+            zmax: haveRange ? range.max : undefined,
             colorbar: { title: varMeta?.units || "" },
         }]
         : [];
@@ -758,7 +835,6 @@ const FieldsPlot = ({ job }) => {
     const zonalLayout = {
         title: `${varMeta?.label || selectedVar}${unitStr} — zonal mean (avg over longitude)`,
         xaxis: { title: "Latitude (°N)", range: [-90, 90], dtick: 30, zeroline: false },
-        // depth vs latitude; surface (shallowest) on top
         yaxis: { title: "Depth (m)", autorange: "reversed", zeroline: false },
         margin: { t: 40, r: 20, b: 48, l: 60 },
     };
@@ -766,14 +842,17 @@ const FieldsPlot = ({ job }) => {
         : effSlice === "zonal" ? zonalLayout : vertLayout;
     // horizontal keeps a fixed 2:1 box; vertical / zonal fill a shorter wide box
     const boxStyle = effSlice === "horizontal"
-        ? { width: "100%", maxWidth: 1100, aspectRatio: "2 / 1" }
-        : { width: "100%", maxWidth: 1100, height: 380 };
+        ? { flex: 1, maxWidth: 1100, aspectRatio: "2 / 1" }
+        : { flex: 1, maxWidth: 1100, height: 380 };
 
     const controlStyle = { fontSize: "13px", marginRight: "16px" };
+    const rowStyle = { marginBottom: "10px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px" };
+    const showDepthSlider = effSlice === "horizontal" && is3d && meta.depth?.length > 1;
+    const showTime = years.length > 1;
 
     return (
         <div>
-            <div style={{ marginBottom: "12px", display: "flex", flexWrap: "wrap", alignItems: "center" }}>
+            <div style={rowStyle}>
                 <label style={controlStyle}>
                     Variable:{" "}
                     <select value={selectedVar} onChange={(e) => setSelectedVar(e.target.value)}>
@@ -795,29 +874,62 @@ const FieldsPlot = ({ job }) => {
                         <option value="zonal">Zonal mean (section)</option>
                     </select>
                 </label>
-                {effSlice === "horizontal" && is3d && (
-                    <label style={controlStyle}>
-                        Depth:{" "}
-                        <select value={depthIdx} onChange={(e) => setDepthIdx(Number(e.target.value))}>
-                            {meta.depth.map((d, i) => (
-                                <option key={i} value={i}>{Math.round(d)} m</option>
-                            ))}
-                        </select>
-                    </label>
-                )}
                 {effSlice === "vertical" && (
-                    <label style={controlStyle}>
-                        Latitude:{" "}
-                        <select value={latIdx} onChange={(e) => setLatIdx(Number(e.target.value))}>
-                            {meta.lat.map((la, i) => (
-                                <option key={i} value={i}>{fmtLat(la)}</option>
-                            ))}
-                        </select>
+                    <label style={{ ...controlStyle, display: "flex", alignItems: "center", gap: "6px" }}>
+                        Latitude:
+                        <input
+                            type="range" min={0} max={meta.lat.length - 1} step={1}
+                            value={latIdx} onChange={(e) => setLatIdx(Number(e.target.value))}
+                            style={{ width: 180 }}
+                        />
+                        <span style={{ minWidth: 40 }}>{fmtLat(meta.lat[latIdx])}</span>
                     </label>
                 )}
             </div>
 
-            {!fieldData ? (
+            <div style={rowStyle}>
+                <label style={controlStyle}>
+                    Colour scale:{" "}
+                    <select value={scaleMode} onChange={(e) => onScaleMode(e.target.value)}>
+                        {Object.entries(SCALE_MODES).map(([k, label]) => (
+                            <option key={k} value={k}>{label}</option>
+                        ))}
+                    </select>
+                </label>
+                <label style={controlStyle}>
+                    Colours:{" "}
+                    <select value={cmapName} onChange={(e) => updatePref({ cmap: e.target.value })}>
+                        {Object.keys(COLORMAPS).map((k) => (
+                            <option key={k} value={k}>{k}</option>
+                        ))}
+                    </select>
+                </label>
+                {scaleMode === "manual" && (
+                    <>
+                        <label style={controlStyle}>
+                            Min{" "}
+                            <input
+                                type="number" step="any" style={{ width: 90 }}
+                                value={isNum(pref.min) ? pref.min : ""}
+                                onChange={(e) => updatePref({ min: parseNum(e.target.value) })}
+                            />
+                        </label>
+                        <label style={controlStyle}>
+                            Max{" "}
+                            <input
+                                type="number" step="any" style={{ width: 90 }}
+                                value={isNum(pref.max) ? pref.max : ""}
+                                onChange={(e) => updatePref({ max: parseNum(e.target.value) })}
+                            />
+                        </label>
+                        <button onClick={resetManual} style={{ fontSize: "12px" }} disabled={!frameRange}>
+                            Reset
+                        </button>
+                    </>
+                )}
+            </div>
+
+            {!years.length ? (
                 <div style={{ padding: "20px", color: "#888" }}>
                     ⏳ Waiting for the first annual-average frame — the model writes one
                     per model year, so the first frame appears once year 1 completes.
@@ -825,22 +937,128 @@ const FieldsPlot = ({ job }) => {
             ) : (
                 <>
                     <div style={{ fontSize: "15px", fontWeight: "bold", color: "#333", marginBottom: "6px" }}>
-                        Year: {fieldData.year}
+                        Year: {shown ? shown.year : viewYear}
+                        {following && active && <span style={{ color: "#c0392b", fontWeight: "normal" }}> ● live</span>}
                     </div>
-                    <div style={boxStyle}>
-                        <Plot
-                            data={plotData}
-                            layout={{ ...layout, autosize: true }}
-                            useResizeHandler
-                            style={{ width: "100%", height: "100%" }}
-                            config={{ responsive: true, displayModeBar: false, displaylogo: false }}
-                        />
+                    <div style={{ display: "flex", alignItems: "stretch", gap: "8px" }}>
+                        {showDepthSlider && (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", fontSize: "12px", width: 70 }}>
+                                <span>Surface</span>
+                                <input
+                                    type="range" min={0} max={meta.depth.length - 1} step={1}
+                                    value={depthIdx} onChange={(e) => setDepthIdx(Number(e.target.value))}
+                                    aria-label="Depth level"
+                                    // vertical, min (surface) at the top
+                                    style={{ writingMode: "vertical-lr", flex: 1, margin: "6px 0" }}
+                                />
+                                <span>Deep</span>
+                                <span style={{ marginTop: 6, textAlign: "center", fontWeight: "bold" }}>
+                                    {Math.round(meta.depth[depthIdx])} m
+                                </span>
+                                <span style={{ color: "#777" }}>
+                                    level {depthIdx + 1}/{meta.depth.length}
+                                </span>
+                            </div>
+                        )}
+                        <div style={boxStyle}>
+                            {grid ? (
+                                <Plot
+                                    data={plotData}
+                                    layout={{ ...layout, autosize: true }}
+                                    useResizeHandler
+                                    style={{ width: "100%", height: "100%" }}
+                                    config={{ responsive: true, displayModeBar: false, displaylogo: false }}
+                                />
+                            ) : (
+                                <div style={{ padding: "20px", color: "#888" }}>Loading…</div>
+                            )}
+                        </div>
                     </div>
+                    {showTime && (
+                        <div style={{ ...rowStyle, marginTop: "10px", flexWrap: "nowrap", maxWidth: 1180 }}>
+                            <button onClick={togglePlay} style={{ width: 70 }}>
+                                {playing ? "❚❚ Pause" : "▶ Play"}
+                            </button>
+                            <input
+                                type="range" min={0} max={years.length - 1} step={1}
+                                value={yearIdx} onChange={(e) => scrubTo(Number(e.target.value))}
+                                aria-label="Model year"
+                                style={{ flex: 1, margin: "0 10px" }}
+                            />
+                            <span style={{ minWidth: 110, fontSize: "13px" }}>
+                                {years[0]} – {years[years.length - 1]}
+                            </span>
+                            <button onClick={goLive} disabled={following} title="Jump to the newest year">
+                                {active ? "Live" : "Latest"}
+                            </button>
+                        </div>
+                    )}
                 </>
             )}
         </div>
     );
 };
+
+// The 2D grid a plot shows for one year's field and the current slice.
+const sliceGrid = (field, slice, depthIdx, latIdx, meta) => {
+    if (slice === "horizontal") {
+        const base = field.is3d ? field.values[depthIdx] : field.values; // lat x lon
+        // tile lon ±360 so the -180..180 display is fully covered (see tileLon)
+        const t = tileLon(meta.lon, base);
+        return { x: t.x, y: meta.lat, z: t.z };
+    }
+    if (slice === "vertical") {
+        const base = field.values.map((depthRow) => depthRow[latIdx]); // depth x lon
+        const t = tileLon(meta.lon, base);
+        return { x: t.x, y: meta.depth, z: t.z };
+    }
+    // zonal mean: average each depth x lat row across longitude, skipping land
+    const z = field.values.map((depthRow) =>
+        depthRow.map((lonRow) => {
+            const vals = lonRow.filter((v) => v != null && Number.isFinite(v));
+            return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        })
+    );
+    return { x: meta.lat, y: meta.depth, z };
+};
+
+// { min, max } of the finite (non-land) cells of a grid, or null if empty.
+const gridRange = (z) => {
+    let min = Infinity, max = -Infinity;
+    for (const row of z) {
+        for (const v of row) {
+            if (v != null && Number.isFinite(v)) {
+                if (v < min) min = v;
+                if (v > max) max = v;
+            }
+        }
+    }
+    return Number.isFinite(min) ? { min, max } : null;
+};
+
+// Manual-range prefill: 4 significant figures, so the inputs stay readable.
+const roundedRange = ({ min, max }) => ({ min: Number(min.toPrecision(4)), max: Number(max.toPrecision(4)) });
+
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+const parseNum = (s) => {
+    const v = parseFloat(s);
+    return Number.isFinite(v) ? v : null;
+};
+const sameList = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// Bounded cache: drop the oldest entry once full (Map keeps insertion order).
+const remember = (cache, key, value) => {
+    cache.set(key, value);
+    if (cache.size > FRAME_CACHE_MAX) cache.delete(cache.keys().next().value);
+};
+
+function loadPrefs() {
+    try {
+        return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+    } catch {
+        return {};
+    }
+}
 
 // Tile a longitude axis (and its data columns) ±360 so a fixed -180..180 display
 // window is fully covered even though the GENIE grid's longitude origin is offset
